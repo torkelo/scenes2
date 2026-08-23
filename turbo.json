@@ -6,60 +6,6 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
-    "@grafana/design-catalog#build": {
-      "dependsOn": [
-        "^build",
-        "@grafana/base-ui#build",
-        "@grafana/ai-elements#build",
-        "@grafana/components#build",
-        "@grafana/icons#build",
-        "@grafana/theme-providers#build"
-      ],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "../components/src/components/**",
-        "../components/CLAUDE.md",
-        "../components/README.md",
-        "../components/docs/**",
-        "../design-tokens/README.md",
-        "../design-tokens/src/getDesignTokens.ts",
-        "../design-tokens/src/_generated/literals.ts",
-        "../design-tokens/generated/tokens.css",
-        "../theme-providers/README.md",
-        "../icons/README.md",
-        "../icons/src/components/**",
-        "../icons/src/components/Icons/iconMetaData.ts",
-        "../base-ui/src/**",
-        "../ai-elements/src/**",
-        "../components/src/cmab/**",
-        "../fonts/README.md",
-        "../../docs/control-surfaces.md",
-        "../../docs/elevation-borders-and-overlays.md",
-        "../../docs/gradients.md",
-        "../../docs/styling-conventions.md",
-        "../../docs/design/foundations.md",
-        "../../docs/design/page-structure.md",
-        "../../docs/design/surfaces.md",
-        "../../docs/design/color.md",
-        "../../docs/design/typography.md",
-        "../../docs/design/components.md",
-        "../../docs/design/motion.md",
-        "../../docs/design/taste.md"
-      ],
-      "outputs": [
-        "src/resources/component-catalog.json",
-        "src/resources/component-usage.json",
-        "src/resources/icon-catalog.json",
-        "src/resources/migration-recipes.json",
-        "src/resources/styling-docs.json",
-        "src/resources/token-catalog.json",
-        "dist/**"
-      ]
-    },
-    "@grafana/design-catalog#test": {
-      "dependsOn": ["build", "^build"],
-      "outputs": ["coverage/**"]
-    },
     "build-storybook": {
       "dependsOn": ["^build"],
       "outputs": ["storybook-static/**"],
