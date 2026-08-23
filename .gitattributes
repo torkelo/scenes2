@@ -1,0 +1,11 @@
+# Hatch-generated agent config — authored under .hatch/ and produced by
+# `pnpm hatch:gen`. Marked generated so GitHub collapses them in diffs and
+# excludes them from language stats. Review the .hatch/ source instead.
+/AGENTS.md linguist-generated=true
+/CLAUDE.md linguist-generated=true
+/.agents/** linguist-generated=true
+/.cursor/** linguist-generated=true
+/.claude/skills/** linguist-generated=true
+/.claude/commands/** linguist-generated=true
+/packages/*/AGENTS.md linguist-generated=true
+/packages/*/CLAUDE.md linguist-generated=true

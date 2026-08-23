@@ -1,0 +1,583 @@
+name: Release
+
+# This workflow owns two publish paths, both running from THIS file on purpose:
+#
+#   • Real releases — on push to `main` (or a manual run with no PR number and
+#     mode left at its "release" default): open or refresh the changesets
+#     "Version Packages" PR, and publish to npm once it merges.
+#   • Ephemeral beta builds — on a trusted `/release-beta` PR comment, a
+#     `release-beta` label added to a PR, a manual run with a PR number, or a
+#     manual run with mode set to "beta" and no PR number (snapshot-publishes
+#     `ref`, `main` by default, instead — see below):
+#     snapshot-version every package with a pending changeset
+#     (`0.0.0-beta-<datetime>`), build, and publish on the `beta` dist-tag, then
+#     report the install commands. Nothing is committed or tagged — throwaway
+#     builds for trying a change in a consumer before it merges. A PR-bound run
+#     comments the install commands on the PR and removes the `release-beta`
+#     label again on success, so re-adding it later fires a fresh build; on
+#     failure the label stays on as a visible marker (remove and re-add it to
+#     retry — label events only fire on add). A `mode: beta` ref dispatch has no
+#     PR to comment on or label to clear, so it writes the same report to the
+#     job summary instead, and fails outright (rather than succeeding quietly)
+#     if there's nothing pending to publish — a green Actions-UI run that
+#     published nothing is too easy to misread as "it worked".
+#
+# Why one file: npm trusted publishing is bound to a single workflow file per
+# package, and `release.yml` already holds that trusted-publisher slot (OIDC,
+# `environment: release` + `id-token: write`). Publishing beta from the same file
+# reuses that publisher — so there's no second npm config to register and no
+# long-lived NPM_TOKEN. (`issue_comment` workflows run from the DEFAULT branch, so
+# the `/release-beta` trigger only works once this is on `main`; use the manual
+# dispatch with a PR number to test beforehand. `pull_request` workflows run from
+# the PR's merge ref instead, so the label trigger works as soon as a PR contains
+# this file.)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/**'
+      - '.changeset/**'
+      - 'pnpm-lock.yaml'
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'PR number to publish a beta build from (leave blank for a normal release run, or for a beta from "ref" below instead)'
+        required: false
+        type: string
+        default: ''
+      mode:
+        description: 'Only used when "pr" is blank. "release": open/update the Version Packages PR as usual. "beta": snapshot-publish pending changesets from "ref" below, with no PR involved.'
+        required: false
+        type: choice
+        options:
+          - release
+          - beta
+        default: release
+      ref:
+        description: 'Only used when "pr" is blank and "mode" is "beta": branch in this repo to snapshot-publish a beta from.'
+        required: false
+        type: string
+        default: main
+
+concurrency:
+  # Real releases serialize on the ref; beta runs serialize per-PR so two PRs can
+  # publish betas independently. A ref-based beta dispatch has no PR number
+  # either, so it falls through to `github.ref` too — deliberately: it
+  # serializes with a real release on the same ref rather than racing it.
+  group: ${{ github.workflow }}-${{ github.event.issue.number || github.event.pull_request.number || github.event.inputs.pr || github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  # ── Real release: open/refresh the Version Packages PR (push to main), publish on merge ──
+  release:
+    name: Release
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.pr == '' && github.event.inputs.mode != 'beta')
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      # Mint a token for the org-owned "Grafana Design" GitHub App from the shared
+      # Vault (no repo secret to manage) so the version-bump commit is authored by
+      # grafana-design[bot], not github-actions[bot]. This clears two org-managed
+      # gates on `main`:
+      #   1. The "Signed Commits" ruleset — create-pull-request below commits via
+      #      the GitHub API, which signs the commit with GitHub's key ("Verified").
+      #   2. The Actions approval gate on github-actions[bot] — an app-token actor
+      #      is trusted, so the version PR's required workflows run without approval.
+      # Token scope is configured via the GitHub App Token Broker — see
+      # terraform/repositories/design/github-app-configs/config.yaml in
+      # grafana/deployment_tools, which grants this workflow's `default` permission
+      # set contents + pull-requests write on `main`. Same pattern as
+      # grafana/grafana-assistant-app.
+      - name: Generate GitHub App token
+        id: app-token
+        uses: grafana/shared-workflows/actions/create-github-app-token@46f48da11e78ebdba7a8747ae456b11062fac83e # create-github-app-token/v0.3.1
+        with:
+          github_app: grafana-design
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      # No registry-url: setup-node would write an .npmrc auth-token line that
+      # references unset NODE_AUTH_TOKEN (pnpm WARN under v7). Publishing uses
+      # OIDC trusted publishing + each package's publishConfig.registry, not a
+      # classic npm token (#493).
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # README.md and config.json are not changesets, so any other *.md file means
+      # there are version bumps pending a release.
+      - name: Check for pending changesets
+        id: changesets
+        run: |
+          if [ -n "$(find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md')" ]; then
+            echo 'has-changesets=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'has-changesets=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Version path: pending changesets → open/refresh the "Version Packages" PR ──
+      - name: Apply version bumps
+        if: steps.changesets.outputs.has-changesets == 'true'
+        # @changesets/changelog-github queries the GitHub API (via an old bundled
+        # node-fetch@2) to build changelog links; that request intermittently fails
+        # with "Premature close". `changeset version` aborts before writing
+        # anything on failure, so retrying from a clean tree is safe.
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm version-packages; then exit 0; fi
+            echo "::warning::version-packages failed (attempt ${attempt}/3); retrying in 10s"
+            sleep 10
+          done
+          echo "::error::version-packages failed after 3 attempts"
+          exit 1
+        env:
+          # Changelog generation only reads public PR/commit/author info, so use
+          # the default token — least privilege, and the exact token that worked
+          # before #365. The app token is reserved for the signed commit below.
+          GITHUB_TOKEN: ${{ github.token }}
+
+      # Reproduce the per-package release manifest that changesets/action used to put
+      # in the PR body. Written outside the repo so create-pull-request doesn't commit it.
+      - name: Build the Version Packages PR body
+        if: steps.changesets.outputs.has-changesets == 'true'
+        run: node scripts/version-pr-body.mjs > "$RUNNER_TEMP/version-pr-body.md"
+
+      # create-pull-request commits the version bumps via the GitHub API
+      # (sign-commits: true) so the commit is signed with GitHub's key ("Verified"),
+      # satisfying the org "Signed Commits" ruleset that a local `git commit` from an
+      # app installation token cannot. It also creates/updates the PR in one step.
+      - name: Create or update the Version Packages PR
+        if: steps.changesets.outputs.has-changesets == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          sign-commits: true
+          branch: changeset-release/main
+          base: main
+          title: 'chore: version packages'
+          commit-message: 'chore: version packages'
+          body-path: ${{ runner.temp }}/version-pr-body.md
+          delete-branch: true
+
+      # ── Publish path: no pending changesets → versions already on main → publish ──
+      - name: Publish to npm
+        id: publish
+        if: steps.changesets.outputs.has-changesets == 'false'
+        # v2 renamed the inputs and outputs, and stopped reading the GITHUB_TOKEN
+        # environment variable ("Setting the GITHUB_TOKEN environment variable does
+        # not configure the action" — v2 README). Passing the App token via `env`
+        # would be silently ignored and the action would fall back to the default
+        # `github.token`, losing the App identity this job depends on, so the token
+        # moves to the `github-token` input. `publish` → `publish-script`, and the
+        # `publishedPackages` output the Slack step reads → `published-packages`.
+        uses: changesets/action@198f833dd7d863100ea6e28967bc9a9fdefadb0a # v2.1.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          publish-script: pnpm release
+
+      # ── Announce real releases in Slack. Deliberately absent from the beta job:
+      # snapshot builds are ephemeral per-PR artifacts and would be noise. Reuses
+      # the PDE digest bot token from Vault (the bot must be a member of the
+      # target channel); the channel comes from the RELEASE_SLACK_CHANNEL_ID
+      # repository variable so it can be changed without editing the workflow. ──
+      - name: Get Slack token from Vault
+        id: slack-secrets
+        if: steps.changesets.outputs.has-changesets == 'false' && steps.publish.outputs.published == 'true'
+        uses: grafana/shared-workflows/actions/get-vault-secrets@2e3743a1f8abfd3e921e53a7726ec0744c11bb01 # get-vault-secrets/v2.0.1
+        with:
+          repo_secrets: |
+            SLACK_BOT_TOKEN=pde-digest:slack-bot-token
+
+      - name: Announce release in Slack
+        if: steps.changesets.outputs.has-changesets == 'false' && steps.publish.outputs.published == 'true'
+        env:
+          SLACK_BOT_TOKEN: ${{ fromJSON(steps.slack-secrets.outputs.secrets).SLACK_BOT_TOKEN }}
+          CHANNEL_ID: ${{ vars.RELEASE_SLACK_CHANNEL_ID }}
+          PUBLISHED_PACKAGES: ${{ steps.publish.outputs.published-packages }}
+        run: |
+          set -euo pipefail
+          COUNT=$(printf '%s' "$PUBLISHED_PACKAGES" | jq 'length')
+          NOUN=$([ "$COUNT" = 1 ] && echo package || echo packages)
+          LINES=$(printf '%s' "$PUBLISHED_PACKAGES" | jq -r '.[] | "• `\(.name)@\(.version)` — <https://www.npmjs.com/package/\(.name)/v/\(.version)|npm> · <https://github.com/${{ github.repository }}/blob/main/packages/\(.name | sub("^@grafana/"; ""))/CHANGELOG.md|changelog>"')
+          TEXT="📦 *Agentic Experience Platform release* — ${COUNT} ${NOUN} published to npm:"$'\n'"$LINES"
+          jq -n --arg channel "$CHANNEL_ID" --arg text "$TEXT" \
+            '{channel: $channel, text: $text, unfurl_links: false, unfurl_media: false}' \
+            | curl -sf -X POST https://slack.com/api/chat.postMessage \
+                -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+                -H 'Content-Type: application/json; charset=utf-8' \
+                -d @- \
+            | jq -e '.ok' > /dev/null
+
+  # ── Authorize a beta trigger ──
+  # The previous inline gate used `github.event.pull_request.author_association`
+  # (and the comment equivalent), but webhook payloads report PRIVATE org members
+  # as CONTRIBUTOR, so it wrongly rejected trusted maintainers whose org
+  # membership isn't public. Resolve trust from the triggering actor's repo
+  # permission instead — that reflects org base permission and team grants
+  # regardless of membership visibility — and fall back to the old
+  # author_association check so this stays a strict superset of the previous gate
+  # (no regression if the permission API is ever unavailable).
+  authorize:
+    name: Authorize beta trigger
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.pr == '' && github.event.inputs.mode == 'beta') ||
+      (github.event_name == 'pull_request' &&
+       github.event.label.name == 'release-beta' &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/release-beta'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      ok: ${{ steps.check.outputs.ok }}
+    steps:
+      - name: Check the triggering actor is trusted to publish
+        id: check
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const actor = context.actor;
+
+            // Primary signal: the actor's effective permission on this repo. It
+            // accounts for org base permission and team grants and does not
+            // depend on public org-membership visibility.
+            let permission = 'none';
+            try {
+              const res = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: actor,
+              });
+              permission = res.data.permission;
+            } catch (err) {
+              core.warning(`Could not resolve ${actor}'s repo permission: ${err.message}`);
+            }
+            const hasWrite = ['admin', 'write'].includes(permission);
+
+            // Fallback: the previous author_association gate, so this is a strict
+            // superset of the old behavior even if the API call above fails.
+            const association =
+              context.eventName === 'issue_comment'
+                ? context.payload.comment?.author_association
+                : context.payload.pull_request?.author_association;
+            const trustedAssociation = ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(
+              association,
+            );
+
+            const ok = hasWrite || trustedAssociation;
+            if (!ok) {
+              core.notice(
+                `release-beta: ${actor} is not trusted to publish ` +
+                  `(permission: ${permission}, association: ${association ?? 'n/a'}); skipping.`,
+              );
+            }
+            core.setOutput('ok', ok ? 'true' : 'false');
+
+  # ── Beta build: snapshot-publish to the `beta` dist-tag ──
+  # Triggered by a trusted /release-beta comment, by adding the `release-beta`
+  # label to a same-repo PR, by a manual dispatch with a PR number, or by a
+  # manual dispatch with mode "beta" and no PR number (builds `ref` instead,
+  # `main` by default). The first three report back to the PR; the last has no
+  # PR to report to, so it writes the same content to the job summary and, per
+  # grafana/design#729, fails outright rather than succeeding quietly if
+  # there's nothing pending to publish.
+  beta:
+    name: Beta
+    # Event filtering and the trust check both live in `authorize`; gate on it.
+    needs: authorize
+    if: needs.authorize.outputs.ok == 'true'
+    runs-on: ubuntu-latest
+    # Backstop against a wedged step (the default is 6 hours, which also blocks
+    # this PR's concurrency slot, so later beta runs queue behind the zombie).
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Resolve build context
+        id: context
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            // A ref-based dispatch: mode is "beta" and no PR number was given.
+            // There's no fork to guard against here — `repos.getBranch` only
+            // ever resolves a branch that already lives in this repo, so the
+            // same-repo property the PR path checks explicitly holds by
+            // construction. Still assert it resolves, rather than relying on
+            // that implicitly: an unresolvable ref fails this step outright.
+            if (
+              context.eventName === 'workflow_dispatch' &&
+              context.payload.inputs.pr === '' &&
+              context.payload.inputs.mode === 'beta'
+            ) {
+              const ref = context.payload.inputs.ref || 'main';
+              let branch;
+              try {
+                const res = await github.rest.repos.getBranch({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  branch: ref,
+                });
+                branch = res.data;
+              } catch (err) {
+                core.setFailed(
+                  `release-beta (ref dispatch): could not resolve branch "${ref}" in ` +
+                    `${context.repo.owner}/${context.repo.repo}: ${err.message}`,
+                );
+                throw err;
+              }
+              return { mode: 'ref', number: null, head_sha: branch.commit.sha, ref };
+            }
+
+            // context.issue.number resolves the PR number for both the
+            // issue_comment and pull_request (labeled) events.
+            const num = context.eventName === 'workflow_dispatch'
+              ? Number(context.payload.inputs.pr)
+              : context.issue.number;
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: num,
+            });
+            // SECURITY: refuse fork PRs. This job runs in the privileged
+            // `release` environment (id-token: write, npm publish) and checks
+            // out + executes the PR head (pnpm install scripts, build,
+            // publish). Running untrusted fork code here would expose the
+            // publish credentials, so restrict to same-repo PRs (whose authors
+            // already have write access). Fails closed if head.repo is null.
+            const expected = `${context.repo.owner}/${context.repo.repo}`;
+            if (pr.head.repo?.full_name !== expected) {
+              core.setFailed(
+                `release-beta refuses fork PRs (head: ${pr.head.repo?.full_name ?? 'unknown'}); ` +
+                  'same-repo PRs only.',
+              );
+              throw new Error('fork PR not allowed');
+            }
+            return { mode: 'pr', number: pr.number, head_sha: pr.head.sha, ref: null };
+
+      - name: Acknowledge
+        if: github.event_name == 'issue_comment'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket',
+            });
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ fromJSON(steps.context.outputs.result).head_sha }}
+          persist-credentials: false
+          # Full history, not a shallow clone. @changesets/changelog-github
+          # looks up the commit that added each changeset file, and on a
+          # shallow clone @changesets/git tries to deepen it with `git fetch
+          # --deepen` — which fails silently on this private repo because
+          # persist-credentials is false, leaving the clone shallow and the
+          # deepen loop spinning forever (the "stuck at snapshot-version"
+          # hang). The release job above uses fetch-depth: 0 for the same
+          # reason.
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      # Same as the release job: no registry-url — OIDC + publishConfig only (#493).
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Count pending changesets
+        id: changesets
+        run: |
+          set -euo pipefail
+          COUNT=$(find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' | wc -l | tr -d ' ')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Pending changesets: $COUNT"
+
+      - name: No changesets on this PR — comment and stop
+        if: steps.changesets.outputs.count == '0' && fromJSON(steps.context.outputs.result).mode == 'pr'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ fromJSON(steps.context.outputs.result).number }},
+              body: '⚠️ release-beta: no pending changesets on this PR, so there is nothing to publish. Add one with `pnpm changeset` and try again.',
+            });
+
+      # Unlike the PR path above, this fails the job rather than succeeding
+      # quietly: a ref dispatch with nothing pending is a real possibility
+      # right after a release (main has no pending changesets by
+      # definition), and a green Actions-UI run that published nothing is
+      # too easy to misread as "it worked" (grafana/design#729).
+      - name: No changesets on this ref — fail
+        if: steps.changesets.outputs.count == '0' && fromJSON(steps.context.outputs.result).mode == 'ref'
+        env:
+          BUILD_REF: ${{ fromJSON(steps.context.outputs.result).ref }}
+        run: |
+          {
+            echo '### ⚠️ Nothing to publish'
+            echo ''
+            echo "No pending changesets on \`$BUILD_REF\`, so there is nothing to snapshot-publish."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::release-beta (ref dispatch): no pending changesets on $BUILD_REF, so there is nothing to publish."
+          exit 1
+
+      # @changesets/changelog-github hard-requires a GITHUB_TOKEN to build the
+      # changelog links and aborts `changeset version` without one — the same
+      # requirement the release job's "Apply version bumps" step satisfies
+      # above. Snapshot changelogs are throwaway, but the generator runs
+      # regardless.
+      - name: Snapshot-version pending changesets
+        if: steps.changesets.outputs.count != '0'
+        run: pnpm exec changeset version --snapshot beta
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      # grafana/design#404: pnpm expands `workspace:^` to a caret range at publish
+      # (`^0.0.0-beta-<ts>`), and per semver a plain release is greater than any
+      # prerelease of the same version — so that caret admits the empty `0.0.0`
+      # name-reservation placeholders on npm, and consumers of the betas resolve the
+      # sibling deps to those stubs. Pin sibling snapshot deps EXACTLY for this
+      # ephemeral build by switching the workspace protocol to `workspace:*` (pnpm
+      # then publishes the exact version). Real releases keep `workspace:^` → caret,
+      # which providers like @grafana/theme-providers need so they dedupe to one copy.
+      - name: Pin snapshot cross-package deps exactly (grafana/design#404)
+        if: steps.changesets.outputs.count != '0'
+        run: |
+          find packages -maxdepth 2 -name package.json -not -path '*/node_modules/*' \
+            -exec sed -i -E 's/"workspace:[~^]"/"workspace:*"/g; s/"[~^](0\.0\.0-beta-[0-9]+)"/"\1"/g' {} +
+
+      # The pin step rewrites the workspace protocol in place, so pnpm-lock.yaml no
+      # longer matches these package.json files. Re-sync it (the dependency graph is
+      # unchanged — same packages, only the `^`/`~` → `*` specifier) so the frozen
+      # dependency check pnpm runs before `pnpm exec` doesn't fail the Build/Publish
+      # steps.
+      - name: Re-sync lockfile after pinning (grafana/design#404)
+        if: steps.changesets.outputs.count != '0'
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build
+        if: steps.changesets.outputs.count != '0'
+        run: pnpm exec turbo run build
+
+      - name: Publish to the beta tag
+        if: steps.changesets.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          pnpm exec changeset publish --tag beta --no-git-tag | tee /tmp/publish.log
+          grep -oE '@[^[:space:]]+@0\.0\.0-beta-[0-9]+' /tmp/publish.log | sort -u > /tmp/published.txt || true
+
+      # One sink or the other, built from the same body, so the two can't
+      # drift: a PR-bound run comments on the PR; a ref dispatch (no PR to
+      # comment on) writes the same content to the job summary instead.
+      - name: Report published versions
+        if: steps.changesets.outputs.count != '0' && success()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          BUILD_MODE: ${{ fromJSON(steps.context.outputs.result).mode }}
+          PR_NUMBER: ${{ fromJSON(steps.context.outputs.result).number }}
+        with:
+          script: |
+            const fs = require('fs');
+            let pkgs = '';
+            try {
+              pkgs = fs.readFileSync('/tmp/published.txt', 'utf8').trim();
+            } catch {}
+            const source = process.env.BUILD_MODE === 'pr' ? 'this PR' : 'this build';
+            const body = pkgs
+              ? [
+                  '### 📦 Beta packages published',
+                  '',
+                  `Installable on the \`beta\` dist-tag (ephemeral snapshot of ${source} — not a real release):`,
+                  '',
+                  '```bash',
+                  pkgs
+                    .split('\n')
+                    .map((p) => `pnpm add ${p}`)
+                    .join('\n'),
+                  '```',
+                ].join('\n')
+              : 'release-beta ran, but no publishable package had a pending changeset, so nothing was published.';
+
+            if (process.env.BUILD_MODE === 'pr') {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: Number(process.env.PR_NUMBER),
+                body,
+              });
+            } else {
+              await core.summary.addRaw(body).write();
+            }
+
+      # Take the label off once the run has finished its work (whether it
+      # published or reported "no changesets") — re-adding the label later
+      # fires a fresh beta build. Runs for EVERY PR-bound trigger, not just
+      # the labeled event: a beta published for this PR via /release-beta or
+      # a PR-numbered manual dispatch also satisfies a pending label, and
+      # leaving it attached would be stale state falsely implying a build is
+      # still owed (the removeLabel call is 404-tolerant, so comment/dispatch
+      # runs on unlabeled PRs are no-ops). A ref dispatch has no PR at all —
+      # skip it outright rather than relying on 404-tolerance to paper over
+      # calling removeLabel with no issue number. Deliberately gated on
+      # success(): if the publish fails the label stays on the PR as a
+      # visible marker, and removing + re-adding it retries the release
+      # (labeled events only fire when the label is ADDED).
+      - name: Remove the release-beta label
+        if: success() && fromJSON(steps.context.outputs.result).mode == 'pr'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: ${{ fromJSON(steps.context.outputs.result).number }},
+                name: 'release-beta',
+              });
+            } catch (error) {
+              // 404 = label already gone (e.g. removed by hand mid-run) — fine.
+              if (error.status !== 404) throw error;
+            }

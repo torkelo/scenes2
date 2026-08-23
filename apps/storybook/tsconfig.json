@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "outDir": "dist",
+    "rootDir": ".",
+    "composite": false,
+    "paths": {
+      "@grafana/icons": ["../../packages/icons/dist/esm/index.d.ts"],
+      "@grafana/components": ["../../packages/components/dist/esm/index.d.ts"],
+      "@grafana/base-ui": ["../../packages/base-ui/dist/esm/index.d.ts"],
+      "@grafana/ai-elements": ["../../packages/ai-elements/dist/esm/index.d.ts"]
+    }
+  },
+  "include": [
+    ".storybook/**/*.ts",
+    ".storybook/**/*.tsx",
+    "scenarios/**/*.ts",
+    "scenarios/**/*.tsx"
+  ]
+}

@@ -1,0 +1,20 @@
+# @grafana/design-setup - Agent guide
+
+npx CLI that wires consuming apps to Agentic Experience Platform (AXP) packages.
+
+## Build & run
+
+```bash
+pnpm run build
+pnpm run typecheck
+pnpm run test
+pnpm run start -- --cwd /path/to/app --dry-run
+```
+
+## Package conventions
+
+- CLI entry: `src/cli.ts` (bin shim: `bin/design-setup.js` → `dist/cli.js`).
+- Library API: `src/index.ts` re-exports `runSetup` / `parseArgs` for tests.
+- Setup steps live under `src/steps/`; keep them idempotent and dry-run aware.
+- Providers go into the app's `App.tsx` (`src/steps/app-root.ts`), not a stub; edit consumer source only where the shape is recognized.
+- Use US English. Name the product **Agentic Experience Platform** (AXP).

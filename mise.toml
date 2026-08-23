@@ -1,0 +1,9 @@
+# Tooling provisioned by mise (https://mise.jdx.dev).
+# `mise install` provisions these; CI uses the same versions via jdx/mise-action.
+#
+# hatch (https://github.com/grafana/hatch) generates the per-agent config under
+# .claude/, .cursor/, .agents/, CLAUDE.md, and AGENTS.md from the .hatch/ source
+# tree. After editing anything under .hatch/, run `pnpm hatch:gen`.
+[tools]
+go = "1.26.6"
+"go:github.com/grafana/hatch/cmd/hatch" = "1.2.0"

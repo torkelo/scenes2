@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": ["vitest/globals", "@testing-library/jest-dom/vitest"],
+    // Relaxed from the repo base: the components migrated in from a
+    // looser TS posture and a follow-up will tighten them per the
+    // monorepo defaults.
+    "verbatimModuleSyntax": false,
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["src"]
+}

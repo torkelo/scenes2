@@ -1,0 +1,42 @@
+# @grafana/design-codemods - Agent guide
+
+Codemod tooling for migrating consumers onto `@grafana/design` packages. Lives alongside `@grafana/eslint-plugin-design`; both consume the same migration data but handle different workflows (bulk CLI vs editor-time ESLint).
+
+## Build & run
+
+```bash
+pnpm run build      # tsc build; sets executable bit on dist/bin/codemod.js
+pnpm run typecheck  # Type-check without emitting
+pnpm run dev        # Watch mode
+pnpm run test       # Run vitest
+pnpm run lint       # Run eslint over src/
+```
+
+## Key files
+
+| File                 | Purpose                                                                 |
+| -------------------- | ----------------------------------------------------------------------- |
+| `src/index.ts`       | Library entry — re-exports `migrations` and types from `@grafana/icons` |
+| `src/bin/codemod.ts` | CLI entry — dispatches to registered subcommands                        |
+| `tsconfig.json`      | Extends the workspace base; adds `types: ['node']` for the bin file     |
+| `vitest.config.ts`   | Test config                                                             |
+
+## Package conventions
+
+- All library exports go through `src/index.ts`.
+- Per-codemod transforms live under `src/<transform-name>/` with their own `transform.ts` + tests; register them in the CLI's subcommand list.
+- Use TypeScript strict mode (inherited from `tsconfig.base.json`).
+- Run `pnpm run typecheck` before completing any task.
+- Add tests next to source as `*.test.ts`.
+
+## Consumption boundary for `migrations`
+
+The `migrations` table is re-exported here from `@grafana/icons/migrations`. **Application code must not import the table from either path**: it's a transform-time artifact intended only for this package's CLI and the `eslint-plugin-design` rule that powers the in-editor auto-fix. The plugin's recommended config carries a `no-restricted-imports` rule blocking direct subpath imports of `@grafana/icons/migrations`; this package is one of the two allowlisted consumers.
+
+## Publishing
+
+This package publishes to npmjs.org via OIDC trusted publishing on the monorepo's release workflow. `publishConfig` is `access: public`.
+
+Sigstore `provenance` is intentionally **not** enabled: npm rejects provenance bundles from `internal`-visibility GitHub repositories. Re-enable `"provenance": true` in `publishConfig` once `grafana/design` is made public.
+
+The first publish requires the package to be registered as a trusted publisher on npmjs.com against `grafana/design` + `release.yml` + the `release` environment. Refer to `docs/PUBLISHING.md` for the full procedure.

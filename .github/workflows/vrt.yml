@@ -1,0 +1,355 @@
+name: Visual Regression Testing
+
+# See plans/visual-regression-testing.md.
+#
+# Renders the @grafana/base-ui, @grafana/ai-elements, and @grafana/components stories
+# in the pinned Playwright container, so the renderer that *creates* a baseline is the
+# one that *checks* it. To keep CI fast as the story count grows, the pull_request path
+# is split into cooperating jobs:
+#
+#   scope   – decide which packages' stories the PR can affect (scope.mjs); the full
+#             suite still runs for broad/harness changes.
+#   build   – build Storybook ONCE on a runner (the static bundle is environment-
+#             independent; only the render step needs the pinned container) and share
+#             it as an artifact, so shards don't each rebuild it.
+#   diff    – shard the diff across parallel container jobs, each rendering its slice
+#             against the committed baselines. Never writes to the branch.
+#   seed    – workflow_dispatch only: (re)generate the canonical baselines and commit
+#             them via a signed GitHub-API commit. Self-contained + unsharded.
+#             Must be dispatched against a `vrt-*` branch (Vault OIDC bind on the
+#             grafana-design app); see the seed job comments for the recipe.
+#   surface – PRs only: on a diff failure, upload a flat vrt-review-pack artifact
+#             (expected+actual only), upload thumbnail images to a private GCS
+#             bucket when the diff count is small, and post a sticky per-image-
+#             accept comment; on success clear any prior comment.
+on:
+  pull_request:
+    paths:
+      - 'packages/base-ui/**'
+      - 'packages/ai-elements/**'
+      - 'packages/components/**'
+      # Shared deps every VRT package renders with — a change can move any render.
+      - 'packages/design-tokens/**'
+      - 'packages/theme-providers/**'
+      - 'packages/icons/**'
+      - 'packages/fonts/**'
+      - 'apps/storybook/**'
+      - '.github/workflows/vrt.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: vrt-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  # 1. pull_request: which packages' stories can this PR affect?
+  scope:
+    name: Determine scope
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # list the PR's changed files (scope.mjs)
+    outputs:
+      run: ${{ steps.scope.outputs.run }}
+      paths: ${{ steps.scope.outputs.paths }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Falls back to the full suite for broad/harness changes; skips when nothing
+      # VRT-relevant changed. See apps/storybook/vrt/scope.mjs.
+      - name: Determine VRT scope
+        id: scope
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node apps/storybook/vrt/scope.mjs
+
+  # 2. pull_request: build Storybook once and share it with the shards.
+  build:
+    name: Build Storybook
+    needs: [scope]
+    if: github.event_name == 'pull_request' && needs.scope.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Storybook
+        run: pnpm turbo run build-storybook --filter=@grafana/storybook
+
+      - name: Upload Storybook
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: storybook-static
+          path: apps/storybook/storybook-static
+          include-hidden-files: true
+          # Kept a few days (not the artifact-minimum 1) so the built bundle stays
+          # downloadable for local Storybook preview of a PR — see the
+          # /storybook-preview command — not just as an intermediate for the diff shards.
+          retention-days: 3
+
+  # 3. pull_request: shard the diff across parallel container jobs.
+  diff:
+    name: Screenshot diff (shard ${{ matrix.shard }}/6)
+    needs: [scope, build]
+    if: github.event_name == 'pull_request' && needs.scope.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    # Tag must equal the installed @playwright/test version so the bundled browser +
+    # system libraries match — this is what makes the zero-tolerance diff stable.
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      # The full ~1200-shot suite splits across these shards; scoped PRs have far
+      # fewer shots, so most shards finish near-instantly. Keep the denominator in the
+      # `--shard` flag below in sync with the length of this list.
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download Storybook
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: storybook-static
+          path: apps/storybook/storybook-static
+
+      # `scope` narrows to the affected packages' stories (empty VRT_SCOPE_PATHS = full
+      # suite); `--shard` then splits that filtered set across the matrix.
+      - name: Screenshot diff
+        env:
+          VRT_SCOPE_PATHS: ${{ needs.scope.outputs.paths }}
+        run: pnpm --filter @grafana/storybook exec playwright test --shard=${{ matrix.shard }}/6
+
+      - name: Upload diff artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vrt-artifacts-shard-${{ matrix.shard }}
+          path: |
+            apps/storybook/test-results/
+            apps/storybook/vrt/report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # 4. workflow_dispatch: (re)generate the canonical baselines and commit them. Self-
+  #    contained + unsharded — kept separate so the signed-commit path stays simple.
+  #
+  #    Dispatch MUST target a `vrt-*` branch. The grafana-design GitHub App's Vault
+  #    OIDC bind only allows workflow_ref values under refs/heads/vrt-*. Running
+  #    this job from `main` (or any other branch) fails at "Generate GitHub App
+  #    token" with an opaque Vault permission error — that is intentional, not a
+  #    misconfiguration.
+  #
+  #    Recipe:
+  #      git push origin <sha>:refs/heads/vrt-<slug>
+  #      gh workflow run vrt.yml --ref vrt-<slug>
+  #      # open a PR from vrt-<slug> into main once the seed commit lands
+  seed:
+    name: Seed baselines
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
+    permissions:
+      contents: read
+      id-token: write # mint the grafana-design app token (Vault OIDC) for the signed commit
+    steps:
+      # App token so the seed commit is signed (org ruleset) and re-triggers this
+      # workflow. Requires dispatch against a `vrt-*` branch — see job comments above.
+      - name: Generate GitHub App token
+        id: app-token
+        uses: grafana/shared-workflows/actions/create-github-app-token@46f48da11e78ebdba7a8747ae456b11062fac83e # create-github-app-token/v0.3.1
+        with:
+          github_app: grafana-design
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Storybook
+        run: pnpm turbo run build-storybook --filter=@grafana/storybook
+
+      # `=all` rewrites every baseline unconditionally. The default mode only
+      # rewrites comparisons that fail, so a wholesale reseed silently skipped
+      # any drift the comparison tolerance absorbed — the mechanism that let
+      # #480's canvas change go unseeded.
+      - name: Regenerate baselines
+        run: pnpm --filter @grafana/storybook exec playwright test --update-snapshots=all
+
+      - name: Commit baselines
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          node apps/storybook/vrt/commit-baselines.mjs \
+            --branch "$GITHUB_REF_NAME" \
+            --message "chore(vrt): seed canonical baselines"
+
+  surface:
+    name: Surface diffs to the PR
+    needs: [diff]
+    # Gated on the VRT_INLINE_ENABLED repo variable. This job uploads diff images to
+    # a private GCS bucket and posts inline thumbnails (as signed URLs) / the per-image
+    # accept comment, which only work once that bucket is provisioned (grafana/deployment_tools). Until
+    # the variable is set to 'true' the job is skipped entirely — the `diff` shards
+    # still gate and upload the report artifacts, so nothing is lost, just not inlined.
+    # Same-repo PRs only: this job authenticates to Google Cloud (write creds via WIF)
+    # then runs a repo-hosted script, so fork PRs — whose head code is untrusted — must
+    # never reach the auth/execute steps (they also can't satisfy the repo-scoped WIF
+    # binding, but this fails them closed first).
+    if: >-
+      ${{ always() && github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      vars.VRT_INLINE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # OIDC → Workload Identity Federation for the GCS upload
+      pull-requests: write # post/update the sticky comment
+      contents: read
+      actions: read # list this run's artifacts for the compact-mode download links
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # --- diff found: gather every shard's diff images, upload to GCS + comment ---
+      # Per-shard subdirectories, deliberately unmerged: every shard writes
+      # vrt/report/results.json at the same relative path, and merging would keep
+      # only one — resolve-actuals.mjs needs all of them to map truncated actual
+      # filenames back to real snapshot ids.
+      - name: Download diff artifacts
+        if: needs.diff.result == 'failure'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: vrt-artifacts-shard-*
+          path: vrt-results
+
+      # Node + workspace deps for sign-urls.mjs (@google-cloud/storage) — only on
+      # the failure path; the no-diff path posts a comment and needs none of this.
+      - name: Setup pnpm
+        if: needs.diff.result == 'failure'
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        if: needs.diff.result == 'failure'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        if: needs.diff.result == 'failure'
+        run: pnpm install --frozen-lockfile
+
+      # Flat expected+actual pack for reviewers (no diff PNGs, no test-results
+      # nesting). Uploaded before the comment so compact/unlisted modes can link
+      # it ahead of the raw shard zips. Approve still reads the shard artifacts.
+      - name: Stage review pack
+        if: needs.diff.result == 'failure'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash apps/storybook/vrt/surface-to-pr.sh --pack-only
+
+      - name: Upload review pack
+        if: needs.diff.result == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vrt-review-pack
+          path: vrt-review-pack/
+          if-no-files-found: ignore
+          retention-days: 14
+          # Re-running surface after a later-step failure would otherwise 409 on
+          # the existing artifact name and never reach the sticky comment again.
+          overwrite: true
+
+      # Authenticate to GCS via Workload Identity Federation and resolve the
+      # bucket name. Consumes the WIF principal set provisioned for grafana/design
+      # by the storage_repository_for_github module (see plans/…). With
+      # use_wif_auth + environment: dev the bucket defaults to grafanalabs-design-dev,
+      # and gcloud (below) is authenticated for it.
+      - name: Authenticate to GCS
+        id: login-to-gcs
+        if: needs.diff.result == 'failure'
+        uses: grafana/shared-workflows/actions/login-to-gcs@1f02013f3a8a0c29e3cb7dc6793158defe914569 # login-to-gcs/v0.3.1
+        with:
+          use_wif_auth: true
+          environment: dev
+
+      - name: Surface diffs to the PR
+        if: needs.diff.result == 'failure'
+        env:
+          VRT_GCS_BUCKET: ${{ steps.login-to-gcs.outputs.bucket }}
+          # Thumbnails are signed URLs on the private bucket, signed keylessly (IAM
+          # signBlob, via sign-urls.mjs) as the bucket's service account — the same SA
+          # login-to-gcs would impersonate in non-WIF mode. Needs
+          # roles/iam.serviceAccountTokenCreator on that SA for this repo's WIF
+          # principal set (terraform/repositories/design in grafana/deployment_tools).
+          VRT_SIGNER_SA: github-${{ github.repository_id }}-dev-gcs@grafanalabs-workload-identity.iam.gserviceaccount.com
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash apps/storybook/vrt/surface-to-pr.sh --comment
+
+      # --- no diff: clear any prior diff comment ---
+      - name: Clear VRT comment
+        if: needs.diff.result == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          cat > /tmp/vrt-clear.md <<'EOF'
+          ### 🖼️ Visual Regression Testing — no changes
+
+          <!-- vrt-comment -->
+
+          All checked stories match their baselines. ✅
+          EOF
+          gh pr comment "$PR_NUMBER" --body-file /tmp/vrt-clear.md --edit-last \
+            2>/dev/null || echo "No prior VRT comment to clear."

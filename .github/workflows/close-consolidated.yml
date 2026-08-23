@@ -1,0 +1,43 @@
+# Close superseded renovate PRs the moment their bumps reach main.
+#
+# The consolidate-deps workflow labels every source PR it rolls up with
+# `consolidated`. Renovate would close those itself on its next sweep
+# (~6h batch cadence), but this runs on every push to main so they vanish
+# immediately after the consolidated PR merges. The close decision is
+# deterministic: a labeled PR closes only when the reverse of its
+# manifest/workflow diff applies cleanly to main — i.e. its changes are
+# verifiably merged. Anything else stays open for renovate to handle.
+name: Close consolidated deps PRs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: close-consolidated
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  close:
+    name: Close superseded source PRs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write # comment on + close the superseded renovate PRs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Close superseded PRs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/consolidate-deps/close-superseded.mjs

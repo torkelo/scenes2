@@ -1,0 +1,205 @@
+# Daily consolidated dependency PR — the automated version of the
+# consolidate-deps skill (see plans/automated-consolidated-deps-pr.md).
+#
+# Inventories open renovate patch/minor PRs (renovate's minimumReleaseAge
+# gate has already aged them), applies their manifest/workflow hunks to a
+# fresh main checkout, regenerates lockfile + downstream artifacts (a
+# lucide-static bump regenerates @grafana/icons and the components shim),
+# authors changesets, runs preflight, and publishes one rolling PR from
+# `deps/consolidated` via a signed GitHub-API commit. Majors, drafts,
+# human-edited branches, and unparseable diffs are held and listed in the
+# PR body. Upstream icon renames (deleted generated components) flag the
+# PR for human review — the rename must be recorded in `renamedIcons` on
+# @grafana/icons/migrations so the icon-renames codemod covers it.
+#
+# The grafana-design app token is minted via Vault OIDC; the broker
+# allow-list in deployment_tools must declare this workflow (schedule +
+# workflow_dispatch run from main).
+name: Consolidated deps PR
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # ~9am London in summer; GitHub cron is UTC and best-effort
+  workflow_dispatch:
+  # Rebuild the rolling branch whenever main's manifests or lockfile move, so
+  # the consolidated PR's lockfile is always generated against current main.
+  # Without this, a lockfile-touching PR merging after the rolling branch was
+  # cut leaves a stale lockfile that GitHub textually auto-merges — that
+  # corrupted pnpm-lock.yaml with duplicate mapping keys when #514 and #515
+  # merged back-to-back. A rebuild triggered by the rolling PR's own merge is
+  # harmless: every source diff is already on main, so nothing applies and
+  # publish is skipped. The deployment_tools app-token binding must list the
+  # push event for these runs to mint the token.
+  push:
+    branches: [main]
+    paths:
+      - 'pnpm-lock.yaml'
+      - '**/package.json'
+
+concurrency:
+  group: consolidate-deps
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  consolidate:
+    name: Consolidate renovate PRs
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: read # inventory lists/reads renovate PRs via github.token
+      id-token: write # mint the grafana-design app token (Vault OIDC)
+    steps:
+      # App token so the branch reset, signed API commit, and PR write all
+      # come from the app (org Signed Commits ruleset; re-triggers CI).
+      - name: Generate GitHub App token
+        id: app-token
+        uses: grafana/shared-workflows/actions/create-github-app-token@46f48da11e78ebdba7a8747ae456b11062fac83e # create-github-app-token/v0.3.1
+        with:
+          github_app: grafana-design
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Self-test the consolidation scripts
+        run: node --test scripts/consolidate-deps/*.test.mjs
+
+      - name: Inventory open renovate PRs
+        id: inventory
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/consolidate-deps/inventory.mjs --scratch "$RUNNER_TEMP/deps"
+          count=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP + '/deps/plan.json','utf8')).selected.length)")
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Apply bumps, regenerate, author changesets
+        if: steps.inventory.outputs.count != '0'
+        run: |
+          node scripts/consolidate-deps/apply.mjs \
+            --scratch "$RUNNER_TEMP/deps" --date "$(date -u +%Y%m%d)"
+
+      # Patch open Dependabot alerts on top of the applied bumps (direct deps
+      # take the higher of the renovate target and the first patched version;
+      # transitive deps move within parent ranges via the lockfile). Fail-open:
+      # if the app token can't read the alerts API the plan records the skip
+      # and the PR says so. Runs even on zero-renovate days, so a security-only
+      # batch still publishes.
+      - name: Patch known vulnerabilities
+        id: vulnpatch
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          node scripts/consolidate-deps/patch-vulnerabilities.mjs \
+            --scratch "$RUNNER_TEMP/deps" --date "$(date -u +%Y%m%d)"
+          patched=$(node -e "console.log((JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP + '/deps/plan.json','utf8')).security?.patched ?? []).length)")
+          echo "patched=$patched" >> "$GITHUB_OUTPUT"
+
+      - name: Preflight
+        id: preflight
+        if: steps.inventory.outputs.count != '0' || steps.vulnpatch.outputs.patched != '0'
+        continue-on-error: true
+        run: pnpm preflight
+
+      # The key powers the advisory summary and the red-preflight triage —
+      # neither is worth killing the run over, so a missing/failed fetch
+      # degrades to "no summary, no triage" instead of "no consolidated PR".
+      - name: Get Anthropic API key from Vault
+        id: secrets
+        if: steps.inventory.outputs.count != '0' || steps.vulnpatch.outputs.patched != '0'
+        continue-on-error: true
+        uses: grafana/shared-workflows/actions/get-vault-secrets@2e3743a1f8abfd3e921e53a7726ec0744c11bb01 # get-vault-secrets/v2.0.1
+        with:
+          # The pde-digest tool's existing key (ci/repo/grafana/design/
+          # pde-digest) — one team key shared across this repo's Claude
+          # automations rather than a second provisioning.
+          repo_secrets: |
+            ANTHROPIC_API_KEY=pde-digest:anthropic-api-key
+
+      # Red preflight → the consolidate-deps skill's CI triage mode: revert
+      # the offending bump or apply a known recovery, never open-ended repair.
+      # The retry below re-verifies deterministically — the agent's own claim
+      # of success is not trusted.
+      - name: Triage preflight failure (consolidate-deps skill)
+        if: (steps.inventory.outputs.count != '0' || steps.vulnpatch.outputs.patched != '0') && steps.preflight.outcome == 'failure' && steps.secrets.outcome == 'success'
+        uses: anthropics/claude-code-action@459ad358ae43fea66bfefd0a1f8d840b4b9791fb # v1.0.194
+        with:
+          anthropic_api_key: ${{ fromJSON(steps.secrets.outputs.secrets).ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          show_full_output: true
+          allowed_bots: '*'
+          claude_args: |
+            --model claude-opus-4-8
+            --max-turns 120
+          prompt: |
+            CI TRIAGE MODE for the consolidate-deps pipeline.
+
+            Read `.claude/skills/consolidate-deps/SKILL.md` and follow its
+            "CI triage mode" section exactly. The working tree already has
+            this run's consolidated dependency bumps applied; `pnpm
+            preflight` failed. The run plan is at `${{ runner.temp }}/deps/plan.json`.
+
+            Your job: make preflight pass by reverting the offending bump(s)
+            (manifest lines back to their pre-bump versions + `pnpm install
+            --no-frozen-lockfile`) or applying one of the skill's known
+            recoveries. Do NOT fix forward beyond those recoveries, do NOT
+            weaken configs or tests, and NEVER push, commit, or open PRs —
+            a later workflow step verifies and publishes.
+
+            When done: move any reverted PR from `selected` to `held` in
+            plan.json (reason: what broke), and write a short markdown
+            account of what failed and what you did to
+            `${{ runner.temp }}/deps/triage.md`.
+
+      - name: Preflight retry after triage
+        id: preflight-retry
+        if: (steps.inventory.outputs.count != '0' || steps.vulnpatch.outputs.patched != '0') && steps.preflight.outcome == 'failure'
+        continue-on-error: true
+        run: pnpm preflight
+
+      # Advisory summary paragraph for the PR body; fail-open (a missing or
+      # failed summary publishes the deterministic body unchanged).
+      - name: Summarize the batch
+        if: (steps.inventory.outputs.count != '0' || steps.vulnpatch.outputs.patched != '0') && steps.secrets.outcome == 'success'
+        env:
+          # Step-level env templates evaluate before `if`, so guard against
+          # the secrets step having been skipped (fromJSON('') throws).
+          ANTHROPIC_API_KEY: ${{ steps.secrets.outputs.secrets && fromJSON(steps.secrets.outputs.secrets).ANTHROPIC_API_KEY || '' }}
+        run: |
+          node scripts/consolidate-deps/summarize.mjs \
+            --scratch "$RUNNER_TEMP/deps" \
+            --preflight "${{ (steps.preflight.outcome == 'success' || steps.preflight-retry.outcome == 'success') && 'pass' || 'fail' }}"
+
+      - name: Publish rolling PR
+        if: steps.inventory.outputs.count != '0' || steps.vulnpatch.outputs.patched != '0'
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          node scripts/consolidate-deps/publish.mjs \
+            --scratch "$RUNNER_TEMP/deps" \
+            --branch deps/consolidated \
+            --preflight "${{ (steps.preflight.outcome == 'success' || steps.preflight-retry.outcome == 'success') && 'pass' || 'fail' }}"
+
+      - name: Job summary
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/deps/plan.json" ]; then
+            {
+              echo '## Consolidated deps run'
+              echo '```json'
+              cat "$RUNNER_TEMP/deps/plan.json"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

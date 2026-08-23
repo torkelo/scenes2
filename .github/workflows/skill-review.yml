@@ -1,0 +1,324 @@
+# Reusable workflow: run @grafana/design "review"-kind skills as advisory PR gates.
+#
+# This is a skill-AGNOSTIC harness. It scopes the PR diff, fetches each named
+# skill from the published @grafana/design-catalog package (the same SKILL.md
+# design-mcp surfaces via get_design_skill), hands the skill body to Claude, and
+# posts one find-or-update PR comment per skill. The rules and the output format
+# live in the skill, not here — so adding a new gate is a one-line change to the
+# caller's `skills` list, with no edit to this file.
+#
+# Only `kind: review` skills run: read-only, diff-in / report-out. The harness
+# refuses any skill that isn't tagged `kind: review`, so an interactive,
+# file-editing skill (migrate-icons, migrate-loading-indicator, …) can't be
+# wired into unattended CI by mistake.
+#
+# Consumer caller (e.g. .github/workflows/design-review.yml in any grafana org repo):
+#
+#   name: Design skill review
+#   on:
+#     pull_request:
+#       types: [opened, reopened, ready_for_review, synchronize]
+#       # Optional but recommended: a paths filter skips the Actions spin-up
+#       # entirely on out-of-scope PRs (the harness also no-ops on an empty
+#       # scoped diff, but only after starting a runner).
+#       paths:
+#         - 'apps/plugin/src/**'
+#         - '.github/workflows/design-review.yml'
+#     issue_comment: { types: [created] }
+#   jobs:
+#     review:
+#       uses: grafana/design/.github/workflows/skill-review.yml@main # pin a tag/SHA for reproducible gates
+#       with:
+#         skills: |
+#           error-state-flagger
+#         paths: |
+#           apps/plugin/src/**/*.{ts,tsx}
+#       secrets: inherit
+#
+# Rerun a single skill on a PR by commenting: /design-review <skill-name>
+
+name: Design skill review (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      skills:
+        description: 'Newline-separated list of `kind: review` skill names to run.'
+        required: true
+        type: string
+      paths:
+        description: Newline-separated git pathspec globs scoping which changed files are reviewed.
+        required: true
+        type: string
+      exclude:
+        description: Regex of files to drop from the scoped set (tests/stories by default).
+        required: false
+        type: string
+        default: '\.(test|spec|stories)\.'
+      package-version:
+        description: >-
+          Version of @grafana/design-catalog to read skills from (pin for
+          reproducible gates). The skills moved here from
+          @grafana/design-codemods, so a pin carried over from before that
+          move names the wrong package's version and should be re-pinned.
+        required: false
+        type: string
+        default: latest
+      model:
+        description: >-
+          Claude model to run. The default suits an advisory per-push gate;
+          pass claude-opus-4-8 for repos that want maximum scrutiny.
+        required: false
+        type: string
+        default: claude-sonnet-5
+      max-turns:
+        description: Max agent turns per skill.
+        required: false
+        type: number
+        # The agent reads the skill, reads the diff, may peek at surrounding
+        # context, then does the find-or-update comment dance; assistant-app's
+        # narrower error-state workflow converged on 20 turns. A cap, not a
+        # target — early finishes don't pay for the headroom.
+        default: 20
+      vault-secret:
+        description: get-vault-secrets path for the Anthropic API key.
+        required: false
+        type: string
+        default: claude:ANTHROPIC_API_KEY
+
+permissions: {}
+
+jobs:
+  enumerate:
+    # PR events (non-draft) always run; `/design-review` comments run only for
+    # trusted authors, and may narrow to a single skill.
+    if: >-
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '/design-review') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+    # Concurrency lives at JOB level, below the guard above. Workflow-level
+    # concurrency is evaluated before job `if:` conditions, so an unrelated PR
+    # comment would cancel an in-flight review before its own guard filtered
+    # it out — grafana-assistant-app hit exactly this with its error-state
+    # review workflow and moved concurrency into the job.
+    concurrency:
+      group: design-skill-review-enumerate-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.skills.outputs.matrix }}
+    steps:
+      - name: Resolve skill matrix
+        id: skills
+        env:
+          SKILLS: ${{ inputs.skills }}
+          EVENT: ${{ github.event_name }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          mapfile -t ALL < <(printf '%s\n' "$SKILLS" | sed 's/[[:space:]]//g' | sed '/^$/d')
+          REQUESTED=""
+          if [ "$EVENT" = "issue_comment" ]; then
+            REQUESTED=$(printf '%s' "$COMMENT_BODY" | grep -oE '/design-review[[:space:]]+[a-z0-9-]+' | awk '{print $2}' | head -1 || true)
+          fi
+          SELECTED=()
+          if [ -n "$REQUESTED" ]; then
+            for s in ${ALL[@]+"${ALL[@]}"}; do [ "$s" = "$REQUESTED" ] && SELECTED+=("$s"); done
+          else
+            SELECTED=(${ALL[@]+"${ALL[@]}"})
+          fi
+          if [ ${#SELECTED[@]} -eq 0 ]; then
+            echo 'matrix={"skill":[]}' >> "$GITHUB_OUTPUT"
+          else
+            printf 'matrix=' >> "$GITHUB_OUTPUT"
+            printf '%s\n' "${SELECTED[@]}" | jq -R . | jq -cs '{skill: .}' >> "$GITHUB_OUTPUT"
+          fi
+
+  review:
+    needs: enumerate
+    if: needs.enumerate.outputs.matrix != '{"skill":[]}'
+    # Grouped per skill so matrix legs never cancel each other; a newer run's
+    # leg replaces the older run's leg for the same PR + skill.
+    concurrency:
+      group: design-skill-review-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}-${{ matrix.skill }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.enumerate.outputs.matrix) }}
+    steps:
+      - name: Resolve PR context
+        id: pr
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            if (context.eventName === 'pull_request') {
+              const pr = context.payload.pull_request;
+              return { number: pr.number, base_sha: pr.base.sha, head_sha: pr.head.sha };
+            }
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            return { number: pr.number, base_sha: pr.base.sha, head_sha: pr.head.sha };
+
+      - name: Checkout PR head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: refs/pull/${{ fromJSON(steps.pr.outputs.result).number }}/head
+
+      - name: Compute scoped diff
+        id: diff
+        env:
+          PATHS: ${{ inputs.paths }}
+          EXCLUDE: ${{ inputs.exclude }}
+          BASE_SHA: ${{ fromJSON(steps.pr.outputs.result).base_sha }}
+          HEAD_SHA: ${{ fromJSON(steps.pr.outputs.result).head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin "$BASE_SHA" --depth=1 || true
+          # Build :(glob) pathspecs from the caller's globs so `**` works.
+          PATHSPECS=()
+          while IFS= read -r p; do
+            [ -z "$p" ] && continue
+            PATHSPECS+=(":(glob)$p")
+          done < <(printf '%s\n' "$PATHS")
+          # Three-dot diff so the file set matches the PR "Files changed" tab.
+          DIFF_FILES=$(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- ${PATHSPECS[@]+"${PATHSPECS[@]}"} | { grep -Ev "$EXCLUDE" || true; })
+          COUNT=$(printf '%s' "$DIFF_FILES" | grep -c . || true)
+          # Stage inside $GITHUB_WORKSPACE (Claude's working-dir allowlist —
+          # the Read tool can't reach /tmp) and use mktemp -d so a malicious
+          # PR can't pre-stage a symlink at a predictable path.
+          STAGE_DIR=$(mktemp -d "$GITHUB_WORKSPACE/.design-review-XXXXXX")
+          : > "$STAGE_DIR/pr.diff"
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            git diff "$BASE_SHA"..."$HEAD_SHA" -- "$f" >> "$STAGE_DIR/pr.diff"
+          done < <(printf '%s\n' "$DIFF_FILES")
+          {
+            echo "count=$COUNT"
+            echo "stage_rel=${STAGE_DIR#"$GITHUB_WORKSPACE/"}"
+            echo "files<<EOF"
+            printf '%s\n' "$DIFF_FILES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "Scoped diff: $COUNT files, $(wc -l < "$STAGE_DIR/pr.diff") lines"
+
+      - name: Fetch skill
+        id: skill
+        if: steps.diff.outputs.count != '0'
+        env:
+          SKILL: ${{ matrix.skill }}
+          PKG_VERSION: ${{ inputs.package-version }}
+          STAGE_REL: ${{ steps.diff.outputs.stage_rel }}
+        run: |
+          set -euo pipefail
+          TMP=$(mktemp -d)
+          # Read the SKILL.md from the published package; --prefix keeps it out of the repo.
+          npm install --silent --no-save --prefix "$TMP" "@grafana/design-catalog@${PKG_VERSION}" >/dev/null 2>&1
+          SKILL_FILE="$TMP/node_modules/@grafana/design-catalog/skills/$SKILL/SKILL.md"
+          if [ ! -f "$SKILL_FILE" ]; then
+            echo "::error::Skill '$SKILL' not found in @grafana/design-catalog@${PKG_VERSION}."
+            exit 1
+          fi
+          # Guardrail: only run read-only review skills unattended.
+          if ! awk '/^---$/{n++; next} n==1' "$SKILL_FILE" | grep -qiE '^kind:[[:space:]]*review[[:space:]]*$'; then
+            echo "::error::Skill '$SKILL' is not 'kind: review' — refusing to run a file-editing skill in CI."
+            exit 1
+          fi
+          # Stage next to the diff, inside the workspace (Read tool allowlist).
+          cp "$SKILL_FILE" "$GITHUB_WORKSPACE/$STAGE_REL/skill.md"
+          echo "Loaded review skill '$SKILL' ($(wc -l < "$GITHUB_WORKSPACE/$STAGE_REL/skill.md") lines)."
+
+      - name: Get secrets
+        id: secrets
+        if: steps.diff.outputs.count != '0'
+        uses: grafana/shared-workflows/actions/get-vault-secrets@2e3743a1f8abfd3e921e53a7726ec0744c11bb01 # get-vault-secrets/v2.0.1
+        with:
+          repo_secrets: |
+            ANTHROPIC_API_KEY=${{ inputs.vault-secret }}
+
+      - name: Run skill review
+        if: steps.diff.outputs.count != '0'
+        uses: anthropics/claude-code-action@459ad358ae43fea66bfefd0a1f8d840b4b9791fb # v1.0.194
+        with:
+          anthropic_api_key: ${{ fromJSON(steps.secrets.outputs.secrets).ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          show_full_output: true
+          # Bot-authored PRs (renovate, Cursor) should still be reviewed.
+          # Without this, claude-code-action's actor gate aborts with
+          # "Workflow initiated by non-human actor". Safe here: the
+          # pull_request trigger feeds a static prompt + staged diff (no
+          # bot-controlled input), and the issue_comment path is gated by
+          # author_association.
+          allowed_bots: '*'
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ fromJSON(steps.pr.outputs.result).number }}
+            SKILL: ${{ matrix.skill }}
+            ACTION RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            CHANGED FILES (scoped, excludes applied):
+            ${{ steps.diff.outputs.files }}
+
+            SKILL DEFINITION: `${{ steps.diff.outputs.stage_rel }}/skill.md` — the `${{ matrix.skill }}` skill. It is the single source of truth for what to flag, what counts as a fix, the exact output format, and the calibration (confidence threshold, density cap, do-not-pad, skips). Path is relative to the repo root inside the runner workspace.
+            PR DIFF (added/modified hunks only, scoped to the files above): `${{ steps.diff.outputs.stage_rel }}/pr.diff`
+
+            Process (prefer a single-pass review over exhaustive exploration):
+            1. Read `${{ steps.diff.outputs.stage_rel }}/skill.md` fully and follow it. Read `${{ steps.diff.outputs.stage_rel }}/pr.diff` start to finish — if it exceeds the Read tool limit, page through it with offset/limit, but never re-read a section.
+            2. Anchor on added lines (`+`); do NOT flag pre-existing code that just lives in a touched file.
+            3. If the diff contains nothing in the skill's scope, stop inspecting code immediately and follow the zero-findings path below.
+            4. For each likely actionable candidate, you may Read only the minimal surrounding file context needed to confirm the finding. Do not read full files or use broad repository search.
+            5. Produce the report exactly per the skill's "Output format" section, honoring its calibration.
+            6. Look up any prior comment from this skill:
+               `EXISTING_ID=$(gh api repos/${{ github.repository }}/issues/${{ fromJSON(steps.pr.outputs.result).number }}/comments --paginate --jq '[.[] | select(.body | contains("<!-- design-skill-review:${{ matrix.skill }} -->")) | .id] | first // empty')`
+               (The `// empty` is critical — without it `first` emits the literal string `null` for an empty array.)
+            7. If there are ZERO findings:
+               - If `EXISTING_ID` is non-empty (a real numeric id, not the string `null`), PATCH it to a resolved body so stale findings don't linger:
+                 ```
+                 ### `${{ matrix.skill }}` — resolved ✅
+
+                 Source: [design skill-review](ACTION RUN)
+
+                 Previously flagged issues are no longer present in this PR's diff.
+
+                 <!-- design-skill-review:${{ matrix.skill }} -->
+                 ```
+               - If `EXISTING_ID` is empty, post nothing.
+               - Finish with exactly: No findings.
+            8. If there ARE findings, write the comment body to `/tmp/findings.md`:
+
+               ### `${{ matrix.skill }}` findings
+
+               Source: [design skill-review](ACTION RUN) · skill surfaced by `@grafana/design-mcp` (`get_design_skill({ name: "${{ matrix.skill }}" })`)
+
+               <the report you produced in step 3>
+
+               <!-- design-skill-review:${{ matrix.skill }} -->
+
+               Replace ACTION RUN with the URL above.
+            9. Find-or-update (do not stack):
+               - If `EXISTING_ID` non-empty: `gh api -X PATCH repos/${{ github.repository }}/issues/comments/$EXISTING_ID -f body=@/tmp/findings.md`
+               - Otherwise: `gh api -X POST repos/${{ github.repository }}/issues/${{ fromJSON(steps.pr.outputs.result).number }}/comments -f body=@/tmp/findings.md`
+            10. Finish with exactly: Posted review.
+
+            Hard limits:
+            - Anchor on the PR diff. Code already in the base branch is out of scope.
+            - Do not invent findings to pad. Zero findings is valid (follow step 7).
+            - Obey the skill's own calibration and skips.
+            - Do not put the review body in your final message — it goes in the PR comment via `gh api`.
+          claude_args: |
+            --model ${{ inputs.model }}
+            --max-turns ${{ inputs.max-turns }}
+            --allowedTools "Bash(gh api:*),Read,Write"

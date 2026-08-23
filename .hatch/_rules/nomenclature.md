@@ -1,0 +1,24 @@
+## Nomenclature
+
+Refer to this monorepo and the tooling it produces as the **Agentic Experience Platform**.
+That is the canonical name for the project and for what it does.
+
+Where brevity matters — tables, headings, or repeated references in a longer document —
+**AXP** is an acceptable abbreviation. Prefer spelling out "Agentic Experience Platform" on
+first use, then shortening to AXP thereafter.
+
+That shorthand is for prose only. Never put "AXP" (in any capitalization) into a name the code
+carries: identifiers, enumerated values, filenames, or directory names. Name those for what they
+are, not for the project that owns them. A name built on the abbreviation says nothing about what
+the thing does, and it has to be renamed whenever the project name changes. Prose is cheap to
+update; an exported name, a persisted enum value, or a path written into a consumer's repo is not.
+
+Do **not** call it the "Agentic Interface Kit" (or AIK), a "Design System", or an
+"Agentic Design System" — those are former names that have been replaced by
+"Agentic Experience Platform". Use "Agentic Experience Platform"
+(or AXP) in docs, comments, commit messages, PR descriptions, and any other prose that
+names the project or its packages, MCP server, ESLint plugin, catalog, and other tools.
+
+The words "design system" remain fine in their generic sense — contrasting a traditional
+design system with this project, or naming an external product (for example, a linked
+article) — but never as the name of _this_ repo or the tooling it ships.

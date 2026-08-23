@@ -1,0 +1,42 @@
+{
+  "name": "@grafana/storybook",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Storybook for all @grafana/design packages",
+  "type": "module",
+  "scripts": {
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "vrt": "pnpm turbo run build-storybook --filter=@grafana/storybook && playwright test",
+    "vrt:run": "playwright test",
+    "vrt:update": "pnpm turbo run build-storybook --filter=@grafana/storybook && playwright test --update-snapshots=all",
+    "vrt:update:docker": "vrt/regen-baselines.sh",
+    "vrt:report": "playwright show-report vrt/report",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "@emotion/css": "^11.13.5",
+    "@google-cloud/storage": "8.0.0",
+    "@grafana/ai-elements": "workspace:*",
+    "@grafana/base-ui": "workspace:*",
+    "@grafana/components": "workspace:*",
+    "@grafana/design-tokens": "workspace:*",
+    "@grafana/fonts": "workspace:*",
+    "@grafana/icons": "workspace:*",
+    "@grafana/theme-providers": "workspace:*",
+    "@playwright/test": "1.62.1",
+    "@storybook/react": "10.5.9",
+    "@storybook/react-vite": "10.5.9",
+    "@types/react": "18.3.31",
+    "@vitejs/plugin-react": "6.0.5",
+    "google-auth-library": "9.15.1",
+    "http-server": "14.1.1",
+    "markdown-to-jsx": "^9.9.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "storybook": "10.5.9",
+    "vite": "8.2.1"
+  }
+}

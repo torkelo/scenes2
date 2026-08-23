@@ -1,0 +1,31 @@
+#!/bin/sh
+# Git hooks installed via `pnpm install` (prepare → core.hooksPath .githooks).
+#
+# pre-commit: when .hatch/ changes are staged, regenerate agent config (pnpm hatch:gen).
+# pre-push:   pnpm format:check — same whole-tree Prettier gate as CI.
+# Bypass with --no-verify if needed.
+
+if ! git diff --cached --name-only | grep -q '^\.hatch/'; then
+  exit 0
+fi
+
+if ! command -v hatch >/dev/null 2>&1; then
+  echo "hatch: .hatch/ changed but the 'hatch' binary isn't on PATH."
+  echo "       Run 'mise install', then 'pnpm hatch:gen', before committing"
+  echo "       (the Hatch CI check will fail otherwise)."
+  exit 1
+fi
+
+echo "hatch: .hatch/ changed — regenerating agent config (pnpm hatch:gen)..."
+if ! pnpm hatch:gen; then
+  echo "hatch: 'pnpm hatch:gen' failed — fix the error above and re-commit."
+  exit 1
+fi
+
+# Stage the regenerated outputs so they're part of this commit.
+git add AGENTS.md CLAUDE.md .agents .cursor .claude/skills .claude/commands 2>/dev/null
+for f in packages/*/AGENTS.md packages/*/CLAUDE.md; do
+  [ -e "$f" ] && git add "$f"
+done
+
+exit 0

@@ -1,0 +1,91 @@
+---
+globs: [packages/base-ui/**]
+alwaysApply: false
+metadata:
+  generated: hatch@v1.2.0
+  source: .hatch/packages/base-ui/_rules/guide.md
+---
+
+# @grafana/base-ui — Agent guide
+
+Grafana-styled shadcn / [Base UI](https://base-ui.com/) component set for the Product Design Engineering Agentic Experience Platform. shadcn components built on Base UI primitives, styled with Grafana design tokens (`Dialog`, `Select`, `Tabs`, `Tooltip`, …). Independent of `@grafana/ui` and `@grafana/data`.
+
+## Critical rules
+
+**Package scope: ports only** — This package holds Grafana-styled ports of the upstream shadcn / Base UI components, nothing else. A new component that builds on these primitives (a bespoke composite or an AXP-specific pattern) belongs in [`@grafana/components`](../components/README.md), or in another package if it doesn't fit there — never here. This keeps the package a pure, maximally reusable port, and avoids a name collision if upstream later ships a component we want to adopt under the same name. Precedent: `IconCallout` lives in `@grafana/components` for exactly this reason.
+
+**Import restrictions** — Do not import from these packages:
+
+- `@grafana/ui`
+- `@grafana/data`
+
+Instead use:
+
+- Design tokens from [`@grafana/design-tokens`](../design-tokens/README.md) — both the `getDesignTokens()` API and the CSS variables from the bundled stylesheet.
+- Icon primitives from [`@grafana/icons`](../icons/README.md).
+- Base UI primitives from [`@base-ui/react`](https://base-ui.com/).
+- Standard React and Emotion (`@emotion/css`).
+
+**Component structure** — Each component lives in its own directory:
+
+```
+ComponentName/
+├── ComponentName.tsx       # Arrow function, named export
+├── ComponentName.styles.ts # Emotion CSS with getStyles()
+├── ComponentName.stories.tsx
+├── ComponentName.test.tsx
+├── index.ts                # export * from './ComponentName'
+└── types.ts                # (optional) shared types, not just props; use this where
+                            # types may need to be shared between components without creating
+                            # circular dependencies
+```
+
+**Exports** — Use named exports with arrow functions, not default exports:
+
+```tsx
+export const ComponentName = ({ label }: ComponentNameProps) => { ... };
+```
+
+**Barrel files** — Use wildcard re-exports:
+
+```ts
+// ComponentName/index.ts
+export * from './ComponentName';
+export * from './types'; // if types.ts exists
+
+// Parent index.ts — add one line per component
+export * from './ComponentName';
+```
+
+**Spelling** — Use US English throughout. The most common slip is "colour"/"colours"; write `color`/`colors` instead. This applies to all identifiers (variables, tokens, class names, file names, comments, type names) **and** to documentation files (`*.md`, JSDoc, prop descriptions). Existing UK-spelt code/docs from earlier in the project's life don't need a sweep for their own sake. If you're already editing a file, fix any UK spellings you touch as you go. Refer to the root `AGENTS.md` `Spelling` section for the workspace-wide convention.
+
+**Code comments** — Default to writing none. Well-named identifiers and the surrounding code should already explain _what_ the code does, so a comment that restates that is noise. Add an inline comment only when:
+
+- The _why_ is non-obvious from the immediate, proximate code: a hidden constraint, a subtle invariant, a workaround for a specific bug, a deliberate cross-component coupling, or behavior that would surprise a reader who only sees this file.
+- The reasoning would require fetching context from elsewhere (another file, an upstream library, a past incident) to reconstruct, so leaving the note saves that lookup.
+
+When a comment _is_ warranted, keep it to **one short line**. Never write multi-paragraph or multi-line comment blocks. If you can't compress the explanation to a single line, the rationale probably belongs in a doc file or a PR description, not in the code.
+
+Do **not** add comments that:
+
+- Describe minor stylistic decisions ("use `flex: 1` so it fills the space", "set `box-sizing: border-box` so padding doesn't push the width"); these are obvious from the code.
+- Narrate the implementation step-by-step.
+- Reference the current task, PR, or recent code change ("added to support X", "matches the new Y design"); that belongs in the commit message / PR description and rots as the codebase evolves.
+- Explain a single line of CSS or a single prop choice unless that choice genuinely encodes a non-obvious constraint.
+
+JSDoc on exported props is a separate concern from inline comments: keep documenting prop contracts (that's the consumer-facing API surface) and apply the sparseness + one-line rule to the implementation body.
+
+## Checklist
+
+Before completing a component:
+
+- [ ] Own directory with matching PascalCase name
+- [ ] Named export with arrow function syntax
+- [ ] No `@grafana/ui` or `@grafana/data` imports
+- [ ] Separate `.styles.ts` file
+- [ ] Barrel file with `export *`
+- [ ] Added to `packages/base-ui/src/index.ts`
+- [ ] Storybook with `Base UI/` namespace
+- [ ] Tests using `getByRole` queries
+- [ ] JSDoc comments on props
+- [ ] ESLint passes

@@ -1,0 +1,56 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'tools/*'
+# pnpm 11 removed `onlyBuiltDependencies` in favor of `allowBuilds` (a
+# name → true/false map). `true` keeps esbuild's install script approved, as it
+# was under the old setting. With `strictDepBuilds` defaulting to true in v11,
+# any unlisted dependency build script fails the install rather than warning.
+allowBuilds:
+  esbuild: true
+# pnpm 11 defaults `blockExoticSubdeps: true`, which blocks regenerating any
+# lockfile that resolves a transitive dependency from a git/tarball source.
+# `react-data-grid` is pulled transitively from grafana's own git fork via
+# `@grafana/runtime` (a peer of @grafana/theme-providers), so without this every
+# lockfile regeneration — renovate's dependency PRs and any local `pnpm install`
+# after a dep change — fails with ERR_PNPM_EXOTIC_SUBDEP. pnpm offers no
+# per-dependency allowlist, so disable the block; the only exotic subdep here is
+# that trusted grafana fork, already present in the lockfile.
+blockExoticSubdeps: false
+# pnpm 11.8.0 enforces a default minimumReleaseAge supply-chain wait; these
+# bumps were published <24h ago, so installs reject them unless explicitly
+# allowed here. Renovate held them in "Pending Status Checks" for the same age
+# gate; this consolidation drains them deliberately. Safe to prune once they age
+# past the cutoff (or on the next bump) — entries from earlier consolidations
+# were pruned here on that basis.
+minimumReleaseAgeExclude:
+  - postcss@8.5.18
+  - tsx@4.23.1
+
+# @grafana/base-ui and @grafana/ai-elements deps (cmdk, Base UI, motion, …) pull
+# @types/react 19 transitively, but the repo standardizes on @types/react 18
+# (runtime React 19) so downstream React 18 consumers stay supported. pnpm 11
+# reads overrides here, not from package.json's `pnpm` field. Pins the whole
+# tree to v18.
+overrides:
+  '@types/react': 18.3.31
+  '@types/react-dom': 18.3.7
+  # Security floors for transitive copies no parent bump can lift (see the
+  # Dependabot alerts named in each entry's PR). Scoped to the pinning parent
+  # so other consumers resolve freely. Prune each once its parent moves.
+  # uuid <11.1.1 (GHSA-w5hq-g745-h8pq); parents pinned by @google-cloud/storage
+  # 7.x / google-auth-library 9.x in apps/storybook until those majors land.
+  # ^14 since #688/#689: uuid 14 is ESM-only (no `require` condition in its
+  # exports map), while gaxios and teeny-request are compiled CJS doing
+  # `require("uuid").v4()`. That resolves only via Node's require(esm), which
+  # is on by default from Node 22.12 — fine against this repo's `>=24` engines
+  # floor and .nvmrc, and verified by loading both parents. Anything consuming
+  # these on Node < 22.12 would break, so do not lower the engines floor while
+  # this override stands.
+  'gaxios>uuid': ^14.0.0
+  'teeny-request>uuid': ^14.0.0
+  # NOT overridable: react-router 6.30.4 under react-router-dom-v5-compat
+  # (via @grafana/ui). GHSA-wrjc-x8rr-h8h6 / GHSA-337j-9hxr-rhxg have no 6.x
+  # backport, and forcing 7.18 breaks the build — v5-compat imports v6-only
+  # internals (UNSAFE_logV6DeprecationWarnings et al.). Clears only when
+  # @grafana/ui drops v5-compat.

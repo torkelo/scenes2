@@ -1,0 +1,22 @@
+---
+targets: [claude, codex]
+name: add-icon-tags
+description: Add searchable tags to an icon in the @grafana/icons tags.json file.
+claude:
+  argument-hint: <IconName or icon-name.svg> <tag1> <tag2> ...
+  allowed-tools: Bash
+---
+
+# Add icon tags
+
+Run the `tag-icon` script in the icons package, passing through all arguments:
+
+```
+pnpm --filter @grafana/icons tag-icon $ARGUMENTS
+```
+
+The script accepts either the icon's PascalCase component name (e.g.
+`BarAlignmentCenter`) or its kebab-case filename (e.g. `bar-alignment-center.svg`),
+normalizes to kebab-case, and merges the new tags into
+`packages/icons/src/icons/tags.json`. It deduplicates existing tags, then
+alphabetizes and prettier-formats the file on write.

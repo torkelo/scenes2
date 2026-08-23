@@ -1,0 +1,185 @@
+name: Approve new screenshots
+
+# See §5.2 of plans/visual-regression-testing.md. When a reviewer ticks accept
+# checkbox(es) in the sticky VRT comment (which edits the comment body), commit those
+# baselines to the PR branch via a signed GitHub-API commit — re-triggering vrt.yml, which
+# then goes green. Capped comments (too many diffs to list) carry a single
+# unlisted accept-all box instead of per-image ones; ticking it regenerates the
+# full suite and commits everything it produces. Two steps, cheap one first: approve.mjs needs only node builtins, so
+# right after checkout (no pnpm, no install) it stages the accepted images from the
+# vrt.yml run's own artifacts and commits them — the common path finishes in seconds.
+# Only when those candidates are unusable (head moved, artifacts expired, id missing)
+# does it emit fallback=true, and the gated steps below install the toolchain and
+# regenerate the whole suite in the pinned container instead. Ticks are batched: a newer
+# edit supersedes any in-flight run (cancel-in-progress + a debounce), and the run accepts
+# every box ticked so far. The commit is the only branch write in the whole VRT system,
+# and it happens solely on an explicit human accept.
+on:
+  issue_comment:
+    types: [edited]
+
+# issue_comment workflows run on the default branch with write access, so guard hard: only
+# for a human edit (sender.type User — also stops the bot's own comment rewrite from
+# re-triggering) to our github-actions-authored sticky comment on a PR. The comment body is
+# NEVER interpolated into a shell command — approve.mjs reads it from the event payload file.
+permissions: {}
+
+# Batch rapid checkbox ticks: a newer edit cancels the in-flight run, which then re-reads the
+# comment and accepts every box ticked so far (paired with the debounce step + approve.mjs).
+concurrency:
+  group: vrt-approve-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  accept:
+    name: Accept new baselines
+    if: >-
+      github.event.issue.pull_request &&
+      github.event.sender.type == 'User' &&
+      github.event.comment.user.login == 'github-actions[bot]' &&
+      contains(github.event.comment.body, '<!-- vrt-comment -->')
+    runs-on: ubuntu-latest
+    # Same pinned renderer as vrt.yml, so the regenerated baseline matches the candidate.
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
+    permissions:
+      contents: read
+      id-token: write # OIDC → the grafana-design app token (signed commit + re-trigger)
+      pull-requests: write # edit the sticky comment
+      actions: read # download the candidate screenshots from the vrt.yml run
+    steps:
+      # Debounce: each rapid tick (re)starts this job and cancels the previous one
+      # (cancel-in-progress) during this cheap wait, so only the final tick reaches the
+      # expensive regen below — and it then accepts every box ticked so far.
+      - name: Debounce rapid ticks
+        run: sleep 30
+
+      # A grafana-design app token (not GITHUB_TOKEN) so the baseline commit is signed
+      # (org "Signed Commits" ruleset) and re-triggers vrt.yml.
+      - name: Generate GitHub App token
+        id: app-token
+        uses: grafana/shared-workflows/actions/create-github-app-token@46f48da11e78ebdba7a8747ae456b11062fac83e # create-github-app-token/v0.3.1
+        with:
+          github_app: grafana-design
+
+      # Resolve the PR head and REFUSE fork PRs. This job runs privileged (write access,
+      # checks out + executes the PR head via the Storybook build). Running untrusted fork
+      # code here is a pwn_request vector, so restrict to same-repo PRs (authors already
+      # have write access). Fails closed if head.repo is null. Mirrors release.yml.
+      - name: Resolve PR context
+        id: pr
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const num = context.issue.number;
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: num,
+            });
+            const expected = `${context.repo.owner}/${context.repo.repo}`;
+            if (pr.head.repo?.full_name !== expected) {
+              core.setFailed(
+                `vrt-approve refuses fork PRs (head: ${pr.head.repo?.full_name ?? 'unknown'}); same-repo PRs only.`,
+              );
+              throw new Error('fork PR not allowed');
+            }
+            return { head_sha: pr.head.sha };
+
+      - name: Checkout PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # A validated 40-hex SHA from the API (same-repo, checked above) — not raw event input.
+          ref: ${{ fromJSON(steps.pr.outputs.result).head_sha }}
+          persist-credentials: false
+
+      # The vrt.yml run that posted the comment embedded its run id + head SHA
+      # (<!-- vrt:candidates:… -->). Its artifacts hold the exact candidate
+      # images the reviewer approved, so approve.mjs commits them directly
+      # instead of re-rendering the whole suite. Parsed via github-script (the
+      # body is never shell-interpolated) and validated to digits.
+      - name: Resolve candidate screenshots run
+        id: candidates
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const body = context.payload.comment.body ?? '';
+            const m = /<!-- vrt:candidates:(\d+):[0-9a-f]{40} -->/i.exec(body);
+            core.setOutput('run_id', m ? m[1] : '');
+
+      # Best-effort: expired artifacts (14-day retention) or a missing marker
+      # just skip the fast path, and approve.mjs regenerates instead. Per-shard
+      # subdirectories, deliberately unmerged: every shard writes
+      # vrt/report/results.json at the same relative path, and merging would keep
+      # only one — resolve-actuals.mjs needs all of them to map truncated actual
+      # filenames back to real snapshot ids.
+      - name: Download candidate screenshots
+        if: steps.candidates.outputs.run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: vrt-artifacts-shard-*
+          path: vrt-candidates
+          run-id: ${{ steps.candidates.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Fast path, before any toolchain setup: the container ships node, and
+      # approve.mjs (plus everything it imports) uses only node builtins, so the
+      # common accept — candidate images fresh for the current head — commits in
+      # seconds with no pnpm install. When the candidates are unusable it leaves
+      # the comment locked, emits fallback=true, and the gated steps below finish
+      # the job. The comment body is read from the event payload file, never
+      # shell-interpolated.
+      - name: Apply accepted baselines
+        id: fast
+        env:
+          GITHUB_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          VRT_CANDIDATES_DIR: vrt-candidates
+          VRT_FAST_ONLY: '1'
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          node apps/storybook/vrt/approve.mjs
+
+      # --- fallback: regenerate the whole suite, which needs the full toolchain ---
+      # The fast step above locked the comment before deferring, so if any of these
+      # steps fails, the cleanup step at the end of the job restores it.
+      - name: Setup pnpm
+        if: steps.fast.outputs.fallback == 'true'
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        if: steps.fast.outputs.fallback == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        if: steps.fast.outputs.fallback == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate and apply accepted baselines
+        if: steps.fast.outputs.fallback == 'true'
+        env:
+          GITHUB_APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          VRT_SKIP_FAST: '1'
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          node apps/storybook/vrt/approve.mjs
+
+      # The fast step locks the comment before deferring (fallback=true), so a
+      # failure in the toolchain steps above would otherwise strand it locked —
+      # in-progress banner, no checkboxes to re-tick — because the regen step
+      # (whose approve.mjs owns the unlock) never runs. Restore the checkboxes
+      # and add the failure/retry note. No-ops when the comment is already
+      # unlocked: a regen failure is restored by approve.mjs's own catch.
+      - name: Restore comment after fallback failure
+        if: failure() && steps.fast.outputs.fallback == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node apps/storybook/vrt/unlock-comment.mjs

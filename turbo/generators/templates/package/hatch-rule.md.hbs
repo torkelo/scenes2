@@ -1,0 +1,87 @@
+# @grafana/{{ name }} - Agent Guide
+
+{{ description }}
+
+## Build & Run
+
+```bash
+pnpm run build      # Build the package (tsc)
+pnpm run typecheck  # Type-check without emitting
+pnpm run dev        # Watch mode
+pnpm run test       # Run vitest
+pnpm run lint       # Run eslint over src/
+```
+
+## Key Files
+
+| File                | Purpose                  |
+| ------------------- | ------------------------ |
+| `src/index.ts`      | Package entry point      |
+| `tsconfig.json`     | Extends root base config |
+| `vitest.config.ts`  | Test config (node env)   |
+
+## Package Conventions
+
+- All exports go through `src/index.ts`
+- Use TypeScript strict mode (inherited from `tsconfig.base.json`)
+- Run `pnpm run typecheck` before completing any task
+- Add tests next to source as `*.test.ts` / `*.test.tsx`
+
+## Publishing
+
+This package publishes to npmjs.org via OIDC trusted publishing.
+`publishConfig` is set to `access: public`.
+
+Sigstore `provenance` is intentionally **not** enabled while
+`grafana/design` is an `internal`-visibility GitHub repository — npm
+rejects provenance bundles from internal repos. Re-enable
+`"provenance": true` in `publishConfig` once the repo is public; it's
+the preferred setting and the release workflow already grants
+`id-token: write` for it.
+
+Before the first release:
+
+1. Register this package as a trusted publisher on npmjs.com against
+   `grafana/design` + `release.yml` + the `release` environment.
+2. Add a changeset (`pnpm changeset`) describing the change.
+3. Merging to `main` opens a release PR; merging that PR publishes.
+
+## Upgrading to dual CJS + ESM
+
+The default build is ESM-only. If consumers need CommonJS, swap
+`tsc --build` for a Rollup setup using `rollup-plugin-esbuild` and
+`rollup-plugin-dts`, and update `main`, `module`, `types`, and
+`exports` accordingly.
+
+## If this package exports CSS
+
+For every `.css` file exposed as a subpath in `exports`, two things have
+to line up:
+
+1. The `exports` entry must be the conditional `{ types, default }` form,
+   pointing at both a sibling `<name>.css.d.ts` and the `.css` itself:
+
+   ```jsonc
+   "./styles.css": {
+     "types":   "./dist/styles.css.d.ts",
+     "default": "./dist/styles.css"
+   }
+   ```
+
+2. The build must emit the sibling `<name>.css.d.ts` next to every
+   published `.css`. The stub is one canonical line:
+
+   ```ts
+   // Side-effect-only stylesheet. This file exists so that
+   // `import '@grafana/{{ name }}/<path>.css'` typechecks
+   // under moduleResolution: "bundler" | "node16" | "nodenext".
+   export {};
+   ```
+
+Without this, consumers on `moduleResolution: "bundler" | "node16" |
+"nodenext"` get `TS2307: Cannot find module or type declarations…` on
+the recommended side-effect import — TypeScript honours the package's
+`exports` field in those modes and refuses to fall back to a wildcard
+`declare module '*.css'` shim. See `@grafana/design-tokens`,
+`@grafana/components`, and `@grafana/fonts` for working examples of
+single-file, wildcard, and inline-build-step patterns respectively.

@@ -1,0 +1,8 @@
+# CODEOWNERS for grafana/design
+#
+# Each line maps a path pattern to one or more owners (users or teams).
+# Owners are automatically requested for review when matching files
+# change. Later entries take precedence over earlier ones.
+
+# Default owner for everything in the repo
+* @grafana/product-design-engineering

@@ -1,0 +1,57 @@
+name: PDE Digest
+
+on:
+  schedule:
+    # 08:00 UTC Mon–Fri ≈ 09:00 BST. Window logic ends at the most recent 9am UK
+    # boundary, so runs must start at/after 09:00 UK or they summarize the wrong day.
+    # Recent 07:00 UTC crons were only ~30–50m late and landed ~08:30–08:50 BST.
+    # BST (summer): 0 8 * * 1-5. GMT (winter): 0 9 * * 1-5.
+    - cron: '0 8 * * 1-5'
+  workflow_dispatch: {}
+
+concurrency:
+  group: pde-digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      # Required to exchange the GitHub OIDC token for a Vault token.
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Get secrets from Vault
+        id: get-secrets
+        # Reads from ci/repo/grafana/design/pde-digest in the Grafana Vault instance.
+        uses: grafana/shared-workflows/actions/get-vault-secrets@753db0190710a686e3e5cf11175c50b175fb8661 # vault-action v4 (Node 24); post get-vault-secrets/v2.0.0
+        with:
+          repo_secrets: |
+            SLACK_BOT_TOKEN=pde-digest:slack-bot-token
+            ANTHROPIC_API_KEY=pde-digest:anthropic-api-key
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run digest
+        env:
+          SLACK_BOT_TOKEN: ${{ fromJSON(steps.get-secrets.outputs.secrets).SLACK_BOT_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ fromJSON(steps.get-secrets.outputs.secrets).ANTHROPIC_API_KEY }}
+          DIGEST_CHANNEL_ID: ${{ vars.DIGEST_CHANNEL_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: pnpm --filter @grafana/pde-digest run digest

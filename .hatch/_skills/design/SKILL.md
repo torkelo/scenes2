@@ -1,0 +1,85 @@
+---
+targets: [claude, codex]
+name: design
+description: The build helper for creating good UI with the Agentic Experience Platform (AXP). A collaborator that clarifies intent, composes the interface from the AXP references, and pressure-tests it against its real states.
+metadata:
+  trigger: You're about to build or change an interface — a page, view, flow, panel, or component — and want it to be good.
+---
+
+# design
+
+The helper for building good UI with the Agentic Experience Platform (AXP). Not a documentation
+index — the AXP references are served through the MCP for that. This is the workflow: clarify what's
+being built, compose the interface from the AXP references, and pressure-test it against its real
+states. Build one solution and iterate on it with the user. Work _with_ them, not ahead of them.
+
+## Clarify before you build
+
+Don't guess at a brief. If any of these isn't specified, ask the user and wait for the answer — a
+wrong assumption here wastes the whole build:
+
+- Who is the user, and what are they trying to get done on this screen?
+- What is the single primary action? What's secondary?
+- What does the real data look like, and what's its worst case — the longest name, none at all,
+  hundreds of rows?
+- Which states must exist: empty, loading, error, partial, success?
+- New screen, or a change to an existing one? If a change, what must stay as it is?
+
+Ask the questions you can't answer from the task, then build once they're settled. Asking a good
+question is not a failure to act; guessing wrong is.
+
+## Build in this order
+
+Each step names the reference that settles it. Fetch that reference with `get_styling_doc({ name })`
+(the slug for each name is in The references below) before you build the step; the early decisions
+constrain the later ones.
+
+0. Inventory primitives: if `@grafana/base-ui` is installed, call `list_base_ui_components` and
+   `get_component` for the primitives you need. → Components & controls
+1. Read the screen — the data, the task, what comes first. → Foundations
+2. Pick the page type — list, detail, settings, overview, entity, creation. → Page structure
+3. Frame it — the fixed shell, the one region that scrolls, the measure, the regions. → Page structure
+4. Place things on surfaces — page, tray, card, popover; and what must never nest. → Surfaces & depth
+5. Apply the detail — color for meaning, type for hierarchy, the row / badge / selection treatments,
+   motion. → Color · Typography · Components & controls · Motion
+
+Throughout, hold the result against **Taste** (`design-taste`) — the judgment that raises a correct
+page to a good one.
+
+## Test with your worst content
+
+Before calling it done, render it with the content that breaks layouts: the longest name, a two-line
+title, an empty list, a failed request, forty rows. Why: dynamic content is where interfaces fail,
+and finding it now costs a token — finding it in production costs a user.
+
+## Hard rules
+
+Orientation only; each is settled in its reference.
+
+- The viewport is a fixed frame: one region scrolls, chrome stays put — never a whole document that
+  scrolls. → Page structure
+- Tokens only: every color, space, radius, and type value comes from `getDesignTokens()`. Never a raw
+  hex, never a hand-written `var(--…)`. → Surfaces & depth, Color
+- Error / failed uses the same 15% tint recipe as success: `red`, or `Badge variant="destructive"`.
+  Never `legacy.colors.error.*`. → Color
+- Color carries meaning; neutral is the default. An accent on something that isn't a state, a
+  selection, or a link is wrong. → Color
+- Edges are soft: a step in fill, a 1px ring, or a quiet hairline. Never a hard or black border. →
+  Surfaces & depth
+- Hierarchy is weight and tone before size. → Typography
+
+## The references
+
+Fetch any with `get_styling_doc({ name })`, or read under `docs/design/`.
+
+- **Foundations** (`design-foundations`) — how to read a screen, and the cross-cutting principles.
+- **Page structure** (`design-page-structure`) — the six page types, the fixed shell and single
+  scroll region, the measure, region dividers, empty states.
+- **Surfaces & depth** (`design-surfaces`) — surface roles, the tray, what never nests, soft edges,
+  concentric radii, dark-mode collisions.
+- **Color** (`design-color`) — functional color, status tones, badges, links, selection color.
+- **Typography** (`design-typography`) — the size steps, weight hierarchy, tabular numerals.
+- **Components & controls** (`design-components`) — control surfaces, and the row, selection, badge,
+  hover, and inline-message treatments.
+- **Motion** (`design-motion`) — durations, easing, and the reduced-motion guard.
+- **Taste** (`design-taste`) — the judgment tier that raises a correct page to a good one: expression, craft, deliberate composition, the reference family. Read it as a baseline, not a step.

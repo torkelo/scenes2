@@ -1,0 +1,26 @@
+# @grafana/{{ name }} - Agent Guide
+
+{{ description }}
+
+## Build & Run
+
+```bash
+pnpm run dev        # Start dev server
+pnpm run build      # Production build
+pnpm run typecheck  # Type-check
+pnpm run preview    # Preview production build
+```
+
+## Key Files
+
+| File | Purpose |
+| --- | --- |
+| `src/main.tsx` | Application entry point |
+| `src/App.tsx` | Root component |
+| `vite.config.ts` | Vite configuration |
+
+## Conventions
+
+- This is a private app (not published to npm)
+- Uses Tailwind CSS v4 with Grafana color tokens
+- Uses `motion/react` for animations (not framer-motion)

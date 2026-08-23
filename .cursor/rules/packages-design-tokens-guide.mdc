@@ -1,0 +1,94 @@
+---
+globs: [packages/design-tokens/**]
+alwaysApply: false
+metadata:
+  generated: hatch@v1.2.0
+  source: .hatch/packages/design-tokens/_rules/guide.md
+---
+
+# @grafana/design-tokens — Agent guide
+
+Source of truth for the Agentic Experience Platform's primitive values (colors, typography, spacing, border, transitions) plus the color-mode-aware role layer that consumes them. Tokens are authored as DTCG-compliant JSON, compiled by Terrazzo into a CSS file and a typed JS API.
+
+## File layout
+
+```
+tokens/
+├── colors/
+│   ├── primitives.json        # The palette: every literal hue (red, gray, brandOrange, …) keyed by ColorStep
+│   ├── roles.light.json       # Mode-aware role colors for light mode (var() references into primitives)
+│   └── roles.dark.json        # Mode-aware role colors for dark mode (var() references into primitives)
+├── legacy/                    # Frozen-in-amber legacy palette / shadows; do not extend
+├── typography.json            # Font families, sizes, weights, letter-spacing
+├── spacing.json
+├── border.json / borderWidth.json
+├── transitions.json
+├── shadow.light.json / shadow.dark.json   # Mode-aware elevation shadows (drop / outline / raised ladders)
+└── tokens.resolver.json       # Wires the foundation set + the colorScheme modifier together
+src/
+├── types.ts                   # COLOR_HUES, ColorHue, ColorStep, PrimitiveColors, SemanticColors, …
+├── getDesignTokens.ts         # Public API
+├── _generated/literals.ts     # Generated literal-value lookup (do not edit by hand)
+└── …
+scripts/
+├── emitLiterals.ts            # Walks the JSON, emits src/_generated/literals.ts
+└── postProcessCss.ts          # Resolves aliases, strips comments, dedupes overrides
+```
+
+## Adding new color tokens — the rules
+
+There are two distinct concepts in `tokens/colors/`, with different obligations. Pick the right one before writing JSON.
+
+### 1. Adding a new **primitive hue** (a literal palette color)
+
+A "hue" is a named family in `primitives.json` with one entry per `ColorStep` (50, 100, 200, …, 950). Adding one means there's a new literal palette color the Agentic Experience Platform can paint with: `gray`, `blue`, `brandOrange`, etc.
+
+When you add a new hue to `tokens/colors/primitives.json`, you **must** mirror it in the type layer:
+
+- Add the camelCase key to **`COLOR_HUES`** in `src/types.ts`. The order doesn't matter semantically, but follow the existing grouping (perceptual reds → yellows → greens → blues → purples → pinks → neutrals → brand at the end).
+- That's it. `ColorHue`, `ColorName`, `PrimitiveColors`, and the literal map are all derived from `COLOR_HUES` automatically, so the new hue surfaces under `getDesignTokens().primitives.colors.<hue>` and as `var(--color-<kebab-name>-<step>)` in the generated CSS with no further changes.
+- Naming: the JSON key is camelCase (e.g. `"brandOrange"`); Terrazzo's variable-name transform converts that to kebab-case for the CSS variable (`--color-brand-orange-50`).
+
+**Watch out for**: any place that holds a `Record<ColorHue, X>` (today the chief offender is `IconTag`'s color-surface map in `packages/components/src/components/IconTag/IconTag.styles.ts`) needs a new entry for the new hue. TypeScript will tell you which call sites break; fix them in the same commit. Mirror the closest existing hue's pattern unless a designer has given you specific values.
+
+After editing primitives.json + types.ts, run `pnpm tokens:build` to regenerate `generated/tokens.css`, `generated/vars.js`, and `src/_generated/literals.ts`. Commit those generated outputs that are tracked (only `src/_generated/literals.ts`; the rest of `generated/` is gitignored).
+
+### 2. Adding a new **role color** (a mode-aware alias)
+
+A "role" is a name in `roles.light.json` and `roles.dark.json` whose `$value` is a `{color.<primitive>.<step>}` (or stepless `{color.white}` / `{color.black}`) reference, so it resolves to one primitive in light mode and (potentially a different) primitive in dark mode. Roles come in **two shapes**, partitioned automatically by their key set:
+
+- **Stepped ramp roles** — keyed by `ColorStep` (50…950), e.g. `neutralGray` (→ `neutral` light / `smoke` dark) and `accent` (→ `brandOrange` in both). These overlay the primitive palette and surface under `getDesignTokens().primitives.colors.<role>`.
+- **Semantic role groups** — keyed by named slots, e.g. `surface` (`background`, `card`, `inset`, …), `interactive`, `line`, `sidebar`, `status`, `overlay`. These surface under the typed `getDesignTokens().semantic.colors.<group>.<role>` section and as `--color-<group>-<role>` CSS variables.
+
+When you add a new role key:
+
+- The role key under `"color"` in `roles.light.json` and `roles.dark.json` **must be unique** — it must NOT clash with any key in `primitives.json`. If a primitive `gray` exists and you also add a role `gray`, Terrazzo's resolver will silently override the primitive in mode contexts, producing the exact bug PR #258 introduced (the `--color-gray-*` variables started swinging with mode instead of staying primitive). Roles get distinct names like `accent`, `neutralGray`, `surface`, …
+- For a **stepped ramp role**: add the role key to **`PrimitiveColors`** in `src/types.ts` as a direct member (alongside the existing `neutralGray` and `accent` entries), typed `Record<ColorStep, string>`. Don't add it to `COLOR_HUES`: roles aren't part of the literal palette and shouldn't be picked up by consumers that iterate hues (e.g. icon-tag color variants).
+- For a **semantic role group** (or a new key inside an existing group): mirror it in **`SemanticColors`** in `src/types.ts`: each group has an explicit role-key union (`SurfaceColorRole`, `LineColorRole`, …). `PrimitiveColors` and `COLOR_HUES` are not involved.
+- Both color-mode files (`roles.light.json` and `roles.dark.json`) **must** define the same set of keys for the same role, even if both modes happen to point at the same primitive. Mismatched keys per mode break the resolver.
+- No emitter change needed. `scripts/emitLiterals.ts` reads both role files automatically, partitions by key shape (all-numeric keys → stepped, anything else → semantic), and emits the right lookup, so `getDesignTokens({ valueType: 'literal', mode })` returns the right value for the requested mode from either `primitives.colors.<role>[step]` or `semantic.colors.<group>.<role>`.
+
+After editing, run `pnpm tokens:build` to regenerate. The CSS post-process pass automatically dedupes role declarations whose light/dark values are identical (no manual maintenance needed there).
+
+## Surfacing tokens via design-catalog and design-mcp
+
+`@grafana/design-catalog` generates `token-catalog.json` from the emitted literals, and `@grafana/design-mcp` serves it to agents in external repos (`list_tokens` / `get_token`). Neither discovers a new token **namespace** automatically:
+
+- A new key inside an existing namespace (a hue, a role, a spacing step) is picked up automatically — the generators iterate the literal objects.
+- A new namespace or group under `getDesignTokens()` (the way `primitives.shadow` was added) needs a matching section in `packages/design-catalog/scripts/generate-token-catalog.ts` **and** a summary bucket in `listTokens` in `packages/design-mcp/src/index.ts`. Without them, external agents can't see the tokens at all — the elevation shadows shipped invisible this way (#451).
+
+The coverage tests in `packages/design-catalog/src/catalogCoverage.test.ts` and `packages/design-mcp/src/index.test.ts` fail until both halves are done; `pnpm turbo run test --filter=@grafana/design-catalog --filter=@grafana/design-mcp` reproduces the CI check locally. A new guidance doc (like `docs/elevation-borders-and-overlays.md`) similarly needs an entry in `packages/design-catalog/src/stylingDocSources.ts` plus a `@grafana/design-catalog#build` input in the root `turbo.json`.
+
+## Validation checklist before committing a token change
+
+- [ ] `pnpm tokens:build` produced `generated/tokens.css`, `generated/vars.js`, and `src/_generated/literals.ts` without errors.
+- [ ] The new variable appears in `generated/tokens.css` under the expected selectors (`:root` for primitives, `[data-color-mode="…"]` for mode-aware role overrides only when light/dark values actually differ).
+- [ ] `getDesignTokens().primitives.colors.<key>` (or `.semantic.colors.<group>.<role>` for semantic roles) returns the expected shape in both default (`'css'`) and `valueType: 'literal'` modes.
+- [ ] The design-catalog and design-mcp coverage tests pass — a new namespace under `getDesignTokens()` needs a `generate-token-catalog.ts` section and a `list_tokens` bucket (refer to "Surfacing tokens via design-catalog and design-mcp" above).
+- [ ] `pnpm preflight` is green — the type extension hasn't broken any downstream `Record<ColorHue, X>` consumer.
+
+## Other conventions
+
+- **Spelling**: US English throughout. Refer to the root `AGENTS.md` for the workspace-wide convention.
+- **Generated files**: `generated/tokens.css`, `generated/vars.js`, and `generated/css/legacy/default.css` are build artifacts (gitignored). `src/_generated/literals.ts` IS committed — regenerate via `pnpm tokens:build` whenever the JSON source changes.
+- **Legacy**: `tokens/legacy/` is frozen. Don't extend it — new work belongs in `primitives.json` or the role files.

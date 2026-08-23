@@ -1,0 +1,6 @@
+#!/bin/sh
+# Run the same whole-tree Prettier check as CI before code reaches GitHub.
+# Enabled via the repo's `prepare` script (git config core.hooksPath .githooks).
+# Bypass with `git push --no-verify` if needed.
+
+pnpm format:check

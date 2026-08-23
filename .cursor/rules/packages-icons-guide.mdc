@@ -1,0 +1,60 @@
+---
+globs: [packages/icons/**]
+alwaysApply: false
+metadata:
+  generated: hatch@v1.2.0
+  source: .hatch/packages/icons/_rules/guide.md
+---
+
+# @grafana/icons - Agent guide
+
+Icon components for @grafana/design. Wraps lucide-static plus a set of Grafana-specific custom SVGs into typed React components.
+
+## Build & run
+
+```bash
+pnpm run import-icons   # Regenerate src/components/Icons/* from SVG sources
+pnpm run build          # Clean + tsc + rollup (CJS + ESM + bundled types)
+pnpm run typecheck      # Type-check without emitting
+pnpm run dev            # tsc --build --watch
+pnpm run test           # Run vitest
+pnpm run lint           # eslint over src/
+```
+
+## Key files
+
+| File                      | Purpose                                                 |
+| ------------------------- | ------------------------------------------------------- |
+| `importIcons.config.json` | Sources, exclusions, output path for the import script  |
+| `src/icons/svg/`          | Custom Grafana SVG sources                              |
+| `src/icons/tags.json`     | Metadata for the custom SVGs                            |
+| `src/components/Icon/`    | The Icon wrapper, types, and styles                     |
+| `src/components/Icons/`   | _Generated_ — one .tsx per icon, plus barrel + metadata |
+| `rollup.config.ts`        | Two-pass dual-format build                              |
+
+## Regenerating icons
+
+Custom SVGs in `src/icons/svg/` are the source of truth for Grafana icons. lucide-static is pulled in as a devDep at icon-generation time. After adding/removing/changing SVGs, or upgrading lucide-static, run:
+
+```bash
+pnpm run import-icons
+```
+
+The import script:
+
+1. Reads SVGs from all configured sources (later sources override earlier ones).
+2. Strips presentational attributes (stroke, fill-opacity, stroke-linecap, etc.) so the wrapper can apply runtime styling.
+3. Converts non-currentColor fills to `currentColor` for outline icons.
+4. Generates one typed React component per icon via Handlebars templates.
+5. Writes barrels (`index.ts`, `allIcons.ts`, `iconMetaData.ts`).
+6. Removes stale component files for icons that no longer have a source.
+
+Generated files live under `src/components/Icons/` and are excluded from prettier (they're already formatted by the script).
+
+## Publishing
+
+This package publishes to npmjs.org via OIDC trusted publishing on the monorepo's release workflow. `publishConfig` is `access: public`.
+
+Sigstore `provenance` is intentionally **not** enabled: npm rejects provenance bundles from `internal`-visibility GitHub repositories with `E422 Unsupported GitHub Actions source repository visibility: "internal"`. Re-enable `"provenance": true` in `publishConfig` once `grafana/design` is made public; it's the preferred setting and the release workflow already grants `id-token: write` for it.
+
+The first publish requires the package to be registered as a trusted publisher on npmjs.com against `grafana/design` + `release.yml` + the `release` environment.

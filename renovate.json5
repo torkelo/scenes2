@@ -1,0 +1,44 @@
+// Repo-level Renovate overrides, merged on top of the self-hosted bot's
+// central defaults (there was previously no repo config at all). Addresses
+// grafana/design#401.
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+
+  // (1) Adopt new releases less eagerly. Don't propose a version until it has
+  // aged 14 days: brand-new releases are the ones that get superseded or pulled
+  // (most compromised releases are yanked within hours), and a release younger
+  // than about two weeks usually still carries a "low" Merge Confidence badge.
+  // Proposing those (e.g. pnpm 11.12.0 in #456, PR'd at 3 days old) is noise
+  // until adoption data graduates them to neutral or high. Gating on the badge
+  // directly (`matchConfidence`) needs a Mend API token on the self-hosted
+  // bot, which grafana's instance doesn't configure, so age is the proxy.
+  // This must stay >= pnpm's own `minimumReleaseAge` supply-chain gate (1 day
+  // by default in pnpm 11+) — when Renovate proposes something younger than
+  // pnpm allows, the PR fails to install until the version is hand-listed in
+  // pnpm-workspace.yaml's `minimumReleaseAgeExclude`; at 14 days that list
+  // should stop accumulating entirely.
+  minimumReleaseAge: '14 days',
+
+  // Security fixes shouldn't wait out the age gate.
+  vulnerabilityAlerts: {
+    minimumReleaseAge: null,
+  },
+
+  // (2) Stop pinning caret-ranged dependencies. Our ranges are deliberate:
+  // an exact pin inside a published package prevents downstream consumers
+  // from overriding or advancing the installed version themselves (for
+  // example to resolve a security issue in a transitive dependency) without
+  // waiting for us to re-release. 'replace' keeps whatever range style each
+  // manifest already uses and only rewrites it when the new version falls
+  // outside the range.
+  rangeStrategy: 'replace',
+  packageRules: [
+    {
+      // Belt and braces with rangeStrategy: kill "pin dependencies" PRs
+      // entirely (e.g. the previously hand-closed #381). GitHub Actions
+      // digest pinning is a separate update type (pinDigest) and stays on.
+      matchUpdateTypes: ['pin'],
+      enabled: false,
+    },
+  ],
+}
