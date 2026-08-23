@@ -25,7 +25,8 @@
     "version-packages": "changeset version && prettier --write '.changeset/**' '**/package.json' '**/CHANGELOG.md'",
     "release": "turbo run build && changeset publish",
     "version:beta": "changeset version --snapshot beta",
-    "release:beta": "turbo run build && changeset publish --tag beta --no-git-tag"
+    "release:beta": "turbo run build && changeset publish --tag beta --no-git-tag",
+    "storybook": "pnpm turbo run storybook --filter=@grafana/storybook"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "0.117.1",

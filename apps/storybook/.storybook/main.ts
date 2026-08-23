@@ -69,20 +69,8 @@ const config: StorybookConfig = {
     config.resolve.alias = [
       ...(Array.isArray(config.resolve.alias) ? config.resolve.alias : []),
       {
-        find: /^@grafana\/icons$/,
-        replacement: path.join(packagesDir, 'icons/src/index.ts'),
-      },
-      {
-        find: /^@grafana\/components$/,
-        replacement: path.join(packagesDir, 'components/src/index.ts'),
-      },
-      {
-        find: /^@grafana\/base-ui$/,
-        replacement: path.join(packagesDir, 'base-ui/src/index.ts'),
-      },
-      {
-        find: /^@grafana\/ai-elements$/,
-        replacement: path.join(packagesDir, 'ai-elements/src/index.ts'),
+        find: /^@grafana\/scenes2$/,
+        replacement: path.join(packagesDir, 'scenes2/src/index.ts'),
       },
     ];
 

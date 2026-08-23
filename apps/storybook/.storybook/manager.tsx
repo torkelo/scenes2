@@ -25,7 +25,7 @@ import {
 addons.setConfig({
   theme: create({
     base: 'dark',
-    brandTitle: '@grafana/design',
+    brandTitle: '@grafana/scenes2',
   }),
 });
 

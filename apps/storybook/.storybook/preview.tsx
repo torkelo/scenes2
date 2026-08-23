@@ -1,4 +1,3 @@
-import '@grafana/design-tokens/tokens.css';
 // Always-on base: cascade-layer order, the `--sb-canvas-*` surface vars (flipped
 // on `data-color-mode`), the self-contained focus ring, and the @xyflow/react
 // dark-theme overrides. (grafana-reset.css + @grafana/fonts are pulled in by
@@ -8,7 +7,7 @@ import './index.css';
 import type { Decorator, Preview } from '@storybook/react';
 
 import { withUsageGuidelines } from './usage-guidelines';
-import { withColorMode } from './withColorMode';
+import { withTheme } from './withTheme';
 
 // Centered story canvas — houses the story and paints the host-like surface via
 // the always-on `--sb-canvas-*` vars (from index.css, flipped on
@@ -38,8 +37,6 @@ const withCanvas: Decorator = (Story, { parameters }) => {
         justifyContent: centered ? 'center' : 'flex-start',
         gap: '1.5rem',
         ...(padded ? { padding: '2.5rem' } : null),
-        backgroundColor: 'var(--sb-canvas-bg)',
-        color: 'var(--sb-canvas-fg)',
       }}
     >
       <Story />
@@ -48,7 +45,7 @@ const withCanvas: Decorator = (Story, { parameters }) => {
 };
 
 const preview: Preview = {
-  decorators: [withColorMode(), withCanvas, withUsageGuidelines],
+  decorators: [withTheme(), withCanvas, withUsageGuidelines],
   parameters: {
     layout: 'fullscreen',
     controls: {

@@ -32,5 +32,9 @@
     "react-dom": "19.2.8",
     "storybook": "10.5.9",
     "vite": "8.2.1"
+  },
+  "dependencies": {
+    "@grafana/data": "^13.2.0",
+    "@grafana/ui": "^13.2.0"
   }
 }
