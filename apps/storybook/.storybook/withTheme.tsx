@@ -25,9 +25,12 @@ const ThemeableStory = ({
     padding: ${theme.spacing(2)};
   }
 
-  body {
-    background: ${theme.colors.background.primary};
-  }
+  :root {
+      --sb-canvas-bg: ${theme.colors.background.page};
+      --sb-canvas-fg: ${theme.colors.text.primary};
+      color: ${theme.colors.text.primary};
+      --focus-ring: oklch(0.708 0 0);
+    }
   `;
 
   return (

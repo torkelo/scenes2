@@ -1,6 +1,5 @@
 import * as emotionModule from '@emotion/eslint-plugin';
 import eslint from '@eslint/js';
-import grafanaDesign from '@grafana/eslint-plugin-design';
 import prettier from 'eslint-config-prettier';
 import cssPlugin from 'eslint-plugin-css';
 import perfectionist from 'eslint-plugin-perfectionist';
@@ -58,7 +57,6 @@ export default defineConfig(
   eslint.configs.recommended,
   tseslint.configs.recommended,
   prettier,
-  grafanaDesign.configs.recommended,
   cssPlugin.configs['flat/recommended'],
   {
     languageOptions: {
