@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 
+import { useInterpolator } from './interpolation/useInterpolator';
 import { TestVariable } from './TestVariable';
-import { useVariable } from './types';
 
 const meta: Meta<typeof TestVariable> = {
   title: 'Scenes2/TestVariable',
@@ -15,10 +15,10 @@ type Story = StoryObj<typeof TestVariable>;
 export const Basic: Story = {
   render: () => {
     return (
-      <TestVariable name="test" value="" query="A.*" delay={2000}>
-        <TestVariable name="test2" value="" query="B.*" delay={2000}>
-          <PrintVariable name="test" />
-          <PrintVariable name="test2" />
+      <TestVariable name="service" value="" query="A.*" delay={1000}>
+        <TestVariable name="pod" value="" query="A.$service.*" delay={2000}>
+          <PrintVariable name="service" />
+          <PrintVariable name="pod" />
         </TestVariable>
       </TestVariable>
     );
@@ -26,11 +26,11 @@ export const Basic: Story = {
 };
 
 function PrintVariable({ name }: { name: string }) {
-  const variable = useVariable(name);
+  const value = useInterpolator(`name=$\{${name}}`);
+
   return (
     <div>
-      <div>Variable name: {variable?.name}</div>
-      <div>Variable value: {variable?.getValue()}</div>
+      <div>{value}</div>
     </div>
   );
 }

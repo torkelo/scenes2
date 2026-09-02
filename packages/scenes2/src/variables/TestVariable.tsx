@@ -1,5 +1,6 @@
 import React, { useContext, useEffect } from 'react';
 
+import { useInterpolator } from './interpolation/useInterpolator';
 import { queryMetricTree } from './metricTree';
 import {
   VariableContext,
@@ -23,6 +24,7 @@ export function TestVariable({
   query,
 }: TestVariableProps) {
   const parentContext = useContext(VariableContext);
+  const queryInterpolated = useInterpolator(query ?? '');
   const context = useVariableContextState({
     name,
     value,
@@ -36,7 +38,7 @@ export function TestVariable({
     }
 
     const cancel = setTimeout(() => {
-      const nodes = queryMetricTree(query || '');
+      const nodes = queryMetricTree(queryInterpolated || '');
 
       if (nodes.length > 0) {
         context.changeValueTo(nodes[0].name);
@@ -46,7 +48,7 @@ export function TestVariable({
     return () => {
       clearTimeout(cancel);
     };
-  }, [query, delay]);
+  }, [queryInterpolated, delay]);
 
   return (
     <VariableContext.Provider value={context}>
