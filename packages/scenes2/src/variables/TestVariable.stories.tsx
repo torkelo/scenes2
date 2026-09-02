@@ -15,8 +15,8 @@ type Story = StoryObj<typeof TestVariable>;
 export const Basic: Story = {
   render: () => {
     return (
-      <TestVariable name="test" value="test">
-        <TestVariable name="test2" value="test2">
+      <TestVariable name="test" value="" query="A.*" delay={2000}>
+        <TestVariable name="test2" value="" query="B.*" delay={2000}>
           <PrintVariable name="test" />
           <PrintVariable name="test2" />
         </TestVariable>

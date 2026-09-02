@@ -3,8 +3,7 @@ import { createContext } from 'react';
 import type { VariableType } from '@grafana/data';
 
 export type VariableValue = VariableValueSingle | VariableValueSingle[];
-
-export type VariableValueSingle = string | boolean | number;
+export type VariableValueSingle = string | boolean | number | null;
 
 export interface SceneVariable {
   type: VariableType;
@@ -19,10 +18,14 @@ export interface SceneVariable {
 
 export interface VariableContextState {
   name: string;
+  value: VariableValue;
   loading?: boolean;
   error?: Error | null;
   getValue(fieldPath?: string): VariableValue | undefined | null;
   getValueText(fieldPath?: string): string;
+  changeValueTo(value: VariableValue): void;
+  setLoading?(loading: boolean): void;
+  setError?(error: Error | null): void;
   parent?: VariableContextState;
 }
 
