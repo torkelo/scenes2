@@ -7,6 +7,8 @@ packages:
 # was under the old setting. With `strictDepBuilds` defaulting to true in v11,
 # any unlisted dependency build script fails the install rather than warning.
 allowBuilds:
+  '@parcel/watcher': true
+  '@swc/core': true
   esbuild: true
 # pnpm 11 defaults `blockExoticSubdeps: true`, which blocks regenerating any
 # lockfile that resolves a transitive dependency from a git/tarball source.
