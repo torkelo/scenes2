@@ -28,15 +28,16 @@ blockExoticSubdeps: false
 minimumReleaseAgeExclude:
   - postcss@8.5.18
   - tsx@4.23.1
+  - '@types/react-dom@19.2.7'
 
-# @grafana/base-ui and @grafana/ai-elements deps (cmdk, Base UI, motion, …) pull
-# @types/react 19 transitively, but the repo standardizes on @types/react 18
-# (runtime React 19) so downstream React 18 consumers stay supported. pnpm 11
-# reads overrides here, not from package.json's `pnpm` field. Pins the whole
-# tree to v18.
+# The repo standardizes on React 19 — runtime and types. @grafana/ui 13.2.0 and
+# its siblings declare `react: ">=19"`, so React 18 consumers are no longer
+# supported and the types follow the runtime. Dependencies still resolving
+# @types/react 18 transitively get lifted to 19 here. pnpm 11 reads overrides
+# from this file, not from package.json's `pnpm` field.
 overrides:
-  '@types/react': 18.3.31
-  '@types/react-dom': 18.3.7
+  '@types/react': 19.2.18
+  '@types/react-dom': 19.2.7
   # Security floors for transitive copies no parent bump can lift (see the
   # Dependabot alerts named in each entry's PR). Scoped to the pinning parent
   # so other consumers resolve freely. Prune each once its parent moves.

@@ -23,7 +23,7 @@
     "@playwright/test": "1.62.1",
     "@storybook/react": "10.5.9",
     "@storybook/react-vite": "10.5.9",
-    "@types/react": "18.3.31",
+    "@types/react": "19.2.18",
     "@vitejs/plugin-react": "6.0.5",
     "google-auth-library": "9.15.1",
     "http-server": "14.1.1",
