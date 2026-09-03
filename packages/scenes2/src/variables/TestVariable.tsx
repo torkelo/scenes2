@@ -79,9 +79,6 @@ function useVariableContextState(
     getValue: (_?: string) => {
       return value;
     },
-    getValueText: (_?: string) => {
-      return String(value);
-    },
     changeValueTo: (newValue: VariableValue) => {
       setValue(newValue);
     },

@@ -1,4 +1,3 @@
-import React from 'react';
 import { createContext } from 'react';
 import type { VariableType } from '@grafana/data';
 
@@ -22,7 +21,6 @@ export interface VariableContextState {
   loading?: boolean;
   error?: Error | null;
   getValue(fieldPath?: string): VariableValue | undefined | null;
-  getValueText(fieldPath?: string): string;
   changeValueTo(value: VariableValue): void;
   setLoading?(loading: boolean): void;
   setError?(error: Error | null): void;
@@ -51,22 +49,3 @@ export type VariableCustomFormatterFn = (
 
 export type InterpolationFormatParameter =
   string | VariableCustomFormatterFn | undefined;
-
-export function useVariable(name: string) {
-  let context = React.useContext(VariableContext);
-
-  if (!context) {
-    throw new Error(
-      'useVariable must be used within a VariableContext.Provider',
-    );
-  }
-
-  while (context) {
-    if (context.name === name) {
-      return context;
-    }
-    context = context.parent;
-  }
-
-  return context;
-}

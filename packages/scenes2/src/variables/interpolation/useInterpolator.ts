@@ -30,13 +30,13 @@ function interpolate(
   target: string,
   context: VariableContextState,
   scopedVars?: ScopedVars,
-  format?: InterpolationFormatParameter,
+  _format?: InterpolationFormatParameter,
 ): string {
   VARIABLE_REGEX.lastIndex = 0;
 
   return target.replace(
     VARIABLE_REGEX,
-    (match, var1, var2, fmt2, var3, fieldPath, fmt3) => {
+    (match, var1, var2, _fmt2, var3, fieldPath, _fmt3) => {
       const variableName = var1 || var2 || var3;
       //const fmt = fmt2 || fmt3 || format;
       const variable = lookupVariable(variableName, match, scopedVars, context);
@@ -45,7 +45,7 @@ function interpolate(
         return match;
       }
 
-      return variable.getValueText(fieldPath) || '';
+      return String(variable.getValue(fieldPath) || '');
     },
   );
 }
