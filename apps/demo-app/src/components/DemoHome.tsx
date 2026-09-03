@@ -1,4 +1,4 @@
-import { TestVariable, useInterpolator } from '@grafana/scenes2';
+import { TestVariable, useInterpolator, useDataQuery } from '@grafana/scenes2';
 
 export function DemoHome() {
   return (
@@ -17,6 +17,7 @@ export function DemoHome() {
 
 function PrintVariable({ name }: { name: string }) {
   const value = useInterpolator(`name=$\{${name}}`);
+  const data = useDataQuery({});
 
   return (
     <div>
