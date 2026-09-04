@@ -1,5 +1,6 @@
 import { getFieldDisplayName } from '@grafana/data';
 import { TestVariable, useInterpolator, useDataQuery, VizConfigBuilders, VizPanel } from '@grafana/scenes2';
+import { VisibilityMode } from '@grafana/schema';
 import { Box, GraphGradientMode, LineInterpolation } from '@grafana/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -24,9 +25,10 @@ export function DemoHome() {
 }
 
 const plainViz = VizConfigBuilders.timeseries()
-  .setCustomFieldConfig('fillOpacity', 0.3)
+  .setCustomFieldConfig('fillOpacity', 30)
   .setCustomFieldConfig('gradientMode', GraphGradientMode.Opacity)
   .setCustomFieldConfig('lineInterpolation', LineInterpolation.Smooth)
+  .setCustomFieldConfig('showPoints', VisibilityMode.Never)
   .build();
 
 function PrintVariable() {
@@ -42,8 +44,6 @@ function PrintVariable() {
     ],
     maxDataPoints: 30,
   });
-
-  console.log(data);
 
   return (
     <div>

@@ -65,13 +65,11 @@ export function useDataQuery<T extends DataQuery>(
   const maxDataPoints = options.maxDataPoints ?? 500;
 
   const queryOptions: UseQueryOptions<PanelData> = {
-    enabled: dsQuery.data && options.enabled !== false,
+    enabled: dsQuery.data != null && options.enabled !== false,
     staleTime: options?.staleTime,
     queryKey: ['data', queries, timeRangeKey],
     placeholderData: loadPreviousData(['data', queries, timeRangeKey]),
     queryFn: () => {
-      console.log('queryFn 2');
-
       const request: DataQueryRequest = {
         requestId: requestId + `-${Date.now()}`,
         targets: queries,
