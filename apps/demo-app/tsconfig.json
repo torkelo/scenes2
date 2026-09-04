@@ -1,3 +1,17 @@
 {
-  "extends": "./.config/tsconfig.json"
+  "extends": "./.config/tsconfig.json",
+  "compilerOptions": {
+    // The scaffolded config pins rootDir to this plugin's src, which rejects
+    // the workspace sources pulled in below (TS6059). Widen it to the repo
+    // root; tsc only ever type-checks here (--noEmit), webpack/swc builds.
+    "rootDir": "../..",
+    // Resolve the workspace package to its source so editor go-to-definition
+    // lands in packages/scenes2/src instead of the bundled dist/*.d.ts.
+    // Re-declares the scaffolded "*" mapping because `paths` replaces the
+    // inherited object rather than merging into it.
+    "paths": {
+      "@grafana/scenes2": ["../../packages/scenes2/src/index.ts"],
+      "*": ["./src/*"]
+    }
+  }
 }

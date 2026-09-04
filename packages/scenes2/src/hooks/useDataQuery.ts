@@ -26,7 +26,10 @@ export interface DataQueryOptions<T extends DataQuery> {
   enabled?: boolean;
   queries: T[];
   staleTime?: number;
+  maxDataPoints?: number;
 }
+
+const timeRange = getDefaultTimeRange(); // TODO: use actual time range from context or props
 
 export function useDataQuery<T extends DataQuery>(
   options: DataQueryOptions<T>,
@@ -61,8 +64,6 @@ export function useDataQuery<T extends DataQuery>(
     return last;
   };
 
-  const timeRange = getDefaultTimeRange(); // TODO: use actual time range from context or props
-
   const timeRangeKey = `${timeRange.from.valueOf()}-${timeRange.to.valueOf()}`;
   const queries = options.queries;
 
@@ -83,7 +84,7 @@ export function useDataQuery<T extends DataQuery>(
         timezone: 'utc',
         interval: '1m',
         intervalMs: 6000,
-        maxDataPoints: 1200,
+        maxDataPoints: options.maxDataPoints ?? 1200,
         scopedVars: {},
         liveStreaming: false,
       };
