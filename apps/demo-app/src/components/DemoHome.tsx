@@ -1,6 +1,6 @@
 import { getFieldDisplayName } from '@grafana/data';
 import { TestVariable, useInterpolator, useDataQuery, VizConfigBuilders, VizPanel } from '@grafana/scenes2';
-import { Box } from '@grafana/ui';
+import { Box, GraphGradientMode, LineInterpolation } from '@grafana/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 export function DemoHome() {
@@ -23,7 +23,11 @@ export function DemoHome() {
   );
 }
 
-const plainViz = VizConfigBuilders.timeseries().build();
+const plainViz = VizConfigBuilders.timeseries()
+  .setCustomFieldConfig('fillOpacity', 0.3)
+  .setCustomFieldConfig('gradientMode', GraphGradientMode.Opacity)
+  .setCustomFieldConfig('lineInterpolation', LineInterpolation.Smooth)
+  .build();
 
 function PrintVariable() {
   const value = useInterpolator('service=${service} pod=${pod}');
@@ -36,16 +40,20 @@ function PrintVariable() {
         alias: 'pod=$pod',
       },
     ],
-    maxDataPoints: 10,
+    maxDataPoints: 30,
   });
 
   console.log(data);
 
   return (
     <div>
-      <div>{value}</div>
-      <div>state: {data.data?.state}</div>
-      {data.data?.series?.length && <div>displayName: {getFieldDisplayName(data.data?.series?.[0].fields[1]!)}</div>}
+      <p>
+        <span>{value}</span>
+        <br />
+        {data.data?.series?.length && (
+          <span>displayName: {getFieldDisplayName(data.data?.series?.[0].fields[1]!)}</span>
+        )}
+      </p>
       <VizPanel title="Test graph" vizConfig={plainViz} data={data.data} />
     </div>
   );

@@ -17,7 +17,7 @@ export function VizPanel(props: VizPanelProps) {
   return (
     <PanelChrome
       title="title"
-      width={400}
+      width={600}
       height={400}
       loadingState={isLoading ? LoadingState.Loading : undefined}
     >

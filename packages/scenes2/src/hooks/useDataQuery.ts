@@ -9,6 +9,7 @@ import { useId } from 'react';
 import { lastValueFrom } from 'rxjs';
 import {
   getDefaultTimeRange,
+  rangeUtil,
   type DataQuery,
   type DataQueryRequest,
   type DataSourceRef,
@@ -27,6 +28,7 @@ export interface DataQueryOptions<T extends DataQuery> {
   queries: T[];
   staleTime?: number;
   maxDataPoints?: number;
+  minInterval?: string;
 }
 
 const timeRange = getDefaultTimeRange(); // TODO: use actual time range from context or props
@@ -39,16 +41,8 @@ export function useDataQuery<T extends DataQuery>(
   const dataSourceSrv = getDataSourceSrv();
   //const timeRangeCtx = useTimeRange();
   const queryClient = useQueryClient();
+  const interpolate = (value: string) => value; // TODO: use actual variable interpolation
   //const timeRange = timeRangeCtx.state.value;
-
-  // // FIXME: move this (possibly in useVariables)
-  // const variablesLoaded = useInterpolatableVariablesResolved(
-  //   // @ts-expect-error
-  //   ...queries.flatMap((q) => [q.datasource?.uid, q.query, q.expr]).filter((x) => !!x)
-  // );
-
-  //const interpolate = useVariableInterpolator();
-  //  const scopedVars = variablesToScopedVars(useVariables());
 
   const dsRef = findFirstDatasource(options.queries);
   const dsQuery = useQuery({
@@ -56,6 +50,8 @@ export function useDataQuery<T extends DataQuery>(
     queryFn: () => dataSourceSrv.get(dsRef),
     staleTime: Infinity,
   });
+
+  console.log('dsQuery', dsQuery);
 
   const loadPreviousData = (queryKey: QueryKey) => () => {
     const data = queryClient.getQueriesData<PanelData>({ queryKey });
@@ -66,6 +62,7 @@ export function useDataQuery<T extends DataQuery>(
 
   const timeRangeKey = `${timeRange.from.valueOf()}-${timeRange.to.valueOf()}`;
   const queries = options.queries;
+  const maxDataPoints = options.maxDataPoints ?? 500;
 
   const queryOptions: UseQueryOptions<PanelData> = {
     enabled: dsQuery.data && options.enabled !== false,
@@ -74,6 +71,7 @@ export function useDataQuery<T extends DataQuery>(
     placeholderData: loadPreviousData(['data', queries, timeRangeKey]),
     queryFn: () => {
       console.log('queryFn 2');
+
       const request: DataQueryRequest = {
         requestId: requestId + `-${Date.now()}`,
         targets: queries,
@@ -85,16 +83,39 @@ export function useDataQuery<T extends DataQuery>(
         timezone: 'utc',
         interval: '1m',
         intervalMs: 6000,
-        maxDataPoints: options.maxDataPoints ?? 1200,
+        maxDataPoints: maxDataPoints,
         scopedVars: {},
         liveStreaming: false,
       };
+
+      const lowerIntervalLimit = options.minInterval
+        ? interpolate(options.minInterval)
+        : dsQuery.data?.interval;
+
+      const norm = rangeUtil.calculateInterval(
+        timeRange,
+        maxDataPoints!,
+        lowerIntervalLimit,
+      );
+
+      request.scopedVars = {
+        __interval: { text: norm.interval, value: norm.interval },
+        __interval_ms: {
+          text: norm.intervalMs.toString(),
+          value: norm.intervalMs,
+        },
+      };
+
+      request.interval = norm.interval;
+      request.intervalMs = norm.intervalMs;
 
       const obs = runRequest(dsQuery.data!, request);
 
       return lastValueFrom(obs);
     },
   };
+
+  console.log('queryOptions', queryOptions.enabled);
 
   return useQuery<PanelData, Error>(queryOptions);
 }
