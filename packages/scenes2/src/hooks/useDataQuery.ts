@@ -8,7 +8,6 @@ import {
 import { useId } from 'react';
 import { lastValueFrom } from 'rxjs';
 import {
-  getDefaultTimeRange,
   rangeUtil,
   type DataQuery,
   type DataQueryRequest,
@@ -16,6 +15,8 @@ import {
   type PanelData,
 } from '@grafana/data';
 import { getDataSourceSrv, getRunRequest } from '@grafana/runtime';
+
+import { useTimeRange } from './useTimeRange';
 
 // import { hasCustomVariableSupport } from './Components/variables/query/guards';
 // import { useInterpolatableVariablesResolved } from './hooks/variables/useInterpolatableVariablesResolved';
@@ -31,18 +32,16 @@ export interface DataQueryOptions<T extends DataQuery> {
   minInterval?: string;
 }
 
-const timeRange = getDefaultTimeRange(); // TODO: use actual time range from context or props
-
 export function useDataQuery<T extends DataQuery>(
   options: DataQueryOptions<T>,
 ): UseQueryResult<PanelData, Error> {
   const requestId = useId();
   const runRequest = getRunRequest();
   const dataSourceSrv = getDataSourceSrv();
-  //const timeRangeCtx = useTimeRange();
+  const timeRangeCtx = useTimeRange();
   const queryClient = useQueryClient();
   const interpolate = (value: string) => value; // TODO: use actual variable interpolation
-  //const timeRange = timeRangeCtx.state.value;
+  const timeRange = timeRangeCtx.value;
 
   const dsRef = findFirstDatasource(options.queries);
   const dsQuery = useQuery({
@@ -50,8 +49,6 @@ export function useDataQuery<T extends DataQuery>(
     queryFn: () => dataSourceSrv.get(dsRef),
     staleTime: Infinity,
   });
-
-  console.log('dsQuery', dsQuery);
 
   const loadPreviousData = (queryKey: QueryKey) => () => {
     const data = queryClient.getQueriesData<PanelData>({ queryKey });
@@ -112,8 +109,6 @@ export function useDataQuery<T extends DataQuery>(
       return lastValueFrom(obs);
     },
   };
-
-  console.log('queryOptions', queryOptions.enabled);
 
   return useQuery<PanelData, Error>(queryOptions);
 }

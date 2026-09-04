@@ -1,7 +1,15 @@
-import { getFieldDisplayName } from '@grafana/data';
-import { TestVariable, useInterpolator, useDataQuery, VizConfigBuilders, VizPanel } from '@grafana/scenes2';
+import {
+  TestVariable,
+  useInterpolator,
+  useDataQuery,
+  VizConfigBuilders,
+  VizPanel,
+  VariableValueSelect,
+  TimeRangeContextPicker,
+  TimeRangeContextProvider,
+} from '@grafana/scenes2';
 import { VisibilityMode } from '@grafana/schema';
-import { Box, GraphGradientMode, LineInterpolation } from '@grafana/ui';
+import { Box, GraphGradientMode, LineInterpolation, Stack } from '@grafana/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 export function DemoHome() {
@@ -10,15 +18,17 @@ export function DemoHome() {
   return (
     <Box padding={5}>
       <QueryClientProvider client={queryClient}>
-        <div>
-          <h1>Demo Home</h1>
+        <TimeRangeContextProvider>
+          <div>
+            <h1>Demo Home</h1>
 
-          <TestVariable name="service" value="" query="A.*" delay={10}>
-            <TestVariable name="pod" value="" query="A.$service.*" delay={20}>
-              <PrintVariable />
+            <TestVariable name="service" value="" query="A.*" delay={10}>
+              <TestVariable name="pod" value="" query="A.$service.*" delay={20}>
+                <PrintVariable />
+              </TestVariable>
             </TestVariable>
-          </TestVariable>
-        </div>
+          </div>
+        </TimeRangeContextProvider>
       </QueryClientProvider>
     </Box>
   );
@@ -32,14 +42,14 @@ const plainViz = VizConfigBuilders.timeseries()
   .build();
 
 function PrintVariable() {
-  const value = useInterpolator('service=${service} pod=${pod}');
+  const alias = useInterpolator('service=${service} pod=${pod}');
   const data = useDataQuery({
     queries: [
       {
         refId: 'A',
         datasource: { uid: 'PD8C576611E62080A' },
         scenarioId: 'random_walk',
-        alias: 'pod=$pod',
+        alias: alias,
       },
     ],
     maxDataPoints: 30,
@@ -47,14 +57,13 @@ function PrintVariable() {
 
   return (
     <div>
-      <p>
-        <span>{value}</span>
-        <br />
-        {data.data?.series?.length && (
-          <span>displayName: {getFieldDisplayName(data.data?.series?.[0].fields[1]!)}</span>
-        )}
-      </p>
-      <VizPanel title="Test graph" vizConfig={plainViz} data={data.data} />
+      <Stack direction="column" gap={3}>
+        <Stack justifyContent={'space-between'}>
+          <VariableValueSelect name="pod" options={['test', 'prod', 'dev']} />
+          <TimeRangeContextPicker />
+        </Stack>
+        <VizPanel title="Test graph" vizConfig={plainViz} data={data.data} />
+      </Stack>
     </div>
   );
 }

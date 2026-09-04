@@ -1,7 +1,7 @@
 import { LoadingState, type PanelData } from '@grafana/data';
 import { PanelChrome } from '@grafana/ui';
 
-import type { VizConfig } from './PanelBuilders';
+import type { VizConfig } from './PanelBuilders/types';
 import { useVizPanel } from './useVizPanel';
 
 export interface VizPanelProps {
