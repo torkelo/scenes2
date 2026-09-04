@@ -1,5 +1,5 @@
 import { getFieldDisplayName } from '@grafana/data';
-import { TestVariable, useInterpolator, useDataQuery } from '@grafana/scenes2';
+import { TestVariable, useInterpolator, useDataQuery, VizConfigBuilders, VizPanel } from '@grafana/scenes2';
 import { Box } from '@grafana/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -23,6 +23,8 @@ export function DemoHome() {
   );
 }
 
+const plainViz = VizConfigBuilders.timeseries().build();
+
 function PrintVariable() {
   const value = useInterpolator('service=${service} pod=${pod}');
   const data = useDataQuery({
@@ -44,6 +46,7 @@ function PrintVariable() {
       <div>{value}</div>
       <div>state: {data.data?.state}</div>
       {data.data?.series?.length && <div>displayName: {getFieldDisplayName(data.data?.series?.[0].fields[1]!)}</div>}
+      <VizPanel title="Test graph" vizConfig={plainViz} data={data.data} />
     </div>
   );
 }
