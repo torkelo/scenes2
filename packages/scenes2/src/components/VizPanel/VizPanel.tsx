@@ -1,14 +1,8 @@
-import { useEffect, useState } from 'react';
-import {
-  getDefaultTimeRange,
-  LoadingState,
-  type PanelData,
-  type PanelPlugin,
-} from '@grafana/data';
-import { getPluginImportUtils } from '@grafana/runtime';
+import { LoadingState, type PanelData } from '@grafana/data';
 import { PanelChrome } from '@grafana/ui';
 
 import type { VizConfig } from './PanelBuilders';
+import { useVizPanel } from './useVizPanel';
 
 export interface VizPanelProps {
   title?: string;
@@ -53,51 +47,4 @@ export function VizPanel(props: VizPanelProps) {
       )}
     </PanelChrome>
   );
-}
-
-function useVizPanel(props: VizPanelProps) {
-  const { pluginId } = props.vizConfig;
-  // A plugin that is already in the cache resolves synchronously, so the first
-  // render can show the panel instead of going through a loading state.
-  const [plugin, setPlugin] = useState<PanelPlugin | null>(
-    () => getPluginImportUtils().getPanelPluginFromCache(pluginId) ?? null,
-  );
-
-  useEffect(() => {
-    const pluginImportUtils = getPluginImportUtils();
-    const cached = pluginImportUtils.getPanelPluginFromCache(pluginId);
-
-    if (cached) {
-      // Same instance as the one the initial state picked up, so React bails
-      // out of the re-render.
-      setPlugin(cached);
-      return;
-    }
-
-    let canceled = false;
-    setPlugin(null);
-
-    pluginImportUtils.importPanelPlugin(pluginId).then((loaded) => {
-      if (!canceled) {
-        setPlugin(loaded);
-      }
-    });
-
-    return () => {
-      canceled = true;
-    };
-  }, [pluginId]);
-
-  return {
-    plugin,
-    isLoading: plugin === null,
-    fieldConfig: props.vizConfig.fieldConfig,
-    panelOptions: props.vizConfig.options,
-    panelData: props.data ?? {
-      state: LoadingState.Loading,
-      series: [],
-      timeRange: getDefaultTimeRange(),
-      timeZone: 'browser',
-    },
-  };
 }
