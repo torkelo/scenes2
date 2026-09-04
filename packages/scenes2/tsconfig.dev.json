@@ -1,0 +1,28 @@
+{
+  // Watch config for `pnpm dev`. The published `exports` map points consumers
+  // at dist/esm (import) and dist/cjs (require), so the watcher has to emit
+  // into dist/esm — the plain tsconfig.json outDir of `dist` writes
+  // dist/index.js, which no consumer ever resolves. Layout matches rollup's
+  // ESM output (preserveModules + preserveModulesRoot: 'src'), so a watch
+  // build drops in over the last full build.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist/esm",
+    // Not a `tsc --build` target; keep incremental caching but with its own
+    // buildinfo so it can't collide with the full build's.
+    "composite": false,
+    "incremental": true,
+    "tsBuildInfoFile": "./dist/esm/.tsbuildinfo"
+  },
+  "include": ["src"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "compiled",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.stories.ts",
+    "src/**/*.stories.tsx",
+    "src/test/**"
+  ]
+}

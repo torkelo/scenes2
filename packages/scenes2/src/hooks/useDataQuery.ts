@@ -73,6 +73,7 @@ export function useDataQuery<T extends DataQuery>(
     queryKey: ['data', queries, timeRangeKey],
     placeholderData: loadPreviousData(['data', queries, timeRangeKey]),
     queryFn: () => {
+      console.log('queryFn 2');
       const request: DataQueryRequest = {
         requestId: requestId + `-${Date.now()}`,
         targets: queries,
