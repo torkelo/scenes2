@@ -12,9 +12,9 @@ import { VisibilityMode } from '@grafana/schema';
 import { Box, GraphGradientMode, LineInterpolation, Stack } from '@grafana/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-export function DemoHome() {
-  const queryClient = new QueryClient();
+const queryClient = new QueryClient();
 
+export function DemoHome() {
   return (
     <Box padding={5}>
       <QueryClientProvider client={queryClient}>

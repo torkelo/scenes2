@@ -14,6 +14,8 @@ export function VizPanel(props: VizPanelProps) {
   const { plugin, isLoading, fieldConfig, panelOptions, panelData } =
     useVizPanel(props);
 
+  console.log('VizPanel render');
+
   return (
     <PanelChrome
       title="title"

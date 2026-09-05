@@ -42,6 +42,7 @@ export function useDataQuery<T extends DataQuery>(
   const queryClient = useQueryClient();
   const interpolate = (value: string) => value; // TODO: use actual variable interpolation
   const timeRange = timeRangeCtx.value;
+  const staleTime = options.staleTime ?? 30000;
 
   const dsRef = findFirstDatasource(options.queries);
   const dsQuery = useQuery({
@@ -63,7 +64,7 @@ export function useDataQuery<T extends DataQuery>(
 
   const queryOptions: UseQueryOptions<PanelData> = {
     enabled: dsQuery.data != null && options.enabled !== false,
-    staleTime: options?.staleTime,
+    staleTime: staleTime,
     queryKey: ['data', queries, timeRangeKey],
     placeholderData: loadPreviousData(['data', queries, timeRangeKey]),
     queryFn: () => {
