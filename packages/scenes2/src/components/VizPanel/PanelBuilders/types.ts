@@ -5,7 +5,10 @@ export type StandardFieldConfigInterface<T, C, Prefix extends string> = {
   [K in keyof T as `${Prefix}${Capitalize<string & K>}`]: (value: T[K]) => C;
 } & {
   [
-    K in Exclude<keyof T, keyof any[]> as `${Prefix}${Capitalize<string & K>}`
+    K in Exclude<
+      keyof T,
+      keyof unknown[]
+    > as `${Prefix}${Capitalize<string & K>}`
   ]: (value: T[K]) => C;
 };
 

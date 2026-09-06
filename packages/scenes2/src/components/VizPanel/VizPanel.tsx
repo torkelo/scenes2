@@ -1,4 +1,4 @@
-import { LoadingState, type PanelData } from '@grafana/data';
+import { type EventBus, LoadingState, type PanelData } from '@grafana/data';
 import { PanelChrome } from '@grafana/ui';
 
 import type { VizConfig } from './PanelBuilders/types';
@@ -42,7 +42,7 @@ export function VizPanel(props: VizPanelProps) {
               onOptionsChange={() => {}}
               replaceVariables={(value: string) => value}
               onChangeTimeRange={() => {}}
-              eventBus={{} as any}
+              eventBus={{} as EventBus}
             />
           )}
         </>

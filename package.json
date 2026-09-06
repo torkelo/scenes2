@@ -20,7 +20,7 @@
     "dev": "turbo run dev",
     "prepare": "git config core.hooksPath .githooks || true",
     "gen": "turbo gen",
-    "hatch:gen": "hatch gen -targets claude,codex,cursor && node scripts/sync-bundled-skills.mjs && prettier --write --ignore-unknown AGENTS.md CLAUDE.md .hatch .agents .cursor .claude/skills .claude/commands 'packages/*/AGENTS.md' 'packages/*/CLAUDE.md' 'packages/design-catalog/skills/*/SKILL.md'",
+    "hatch:gen": "hatch gen -targets claude,codex,cursor && node scripts/sync-bundled-skills.mjs && prettier --write --ignore-unknown AGENTS.md CLAUDE.md .hatch .agents .cursor .claude/skills .claude/commands 'packages/*/AGENTS.md' 'packages/*/CLAUDE.md'",
     "hatch:check": "pnpm hatch:gen && git diff --exit-code",
     "version-packages": "changeset version && prettier --write '.changeset/**' '**/package.json' '**/CHANGELOG.md'",
     "release": "turbo run build && changeset publish",

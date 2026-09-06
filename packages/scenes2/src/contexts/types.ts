@@ -1,8 +1,8 @@
 import { BusEventWithPayload } from '@grafana/data';
 
-export class ContextValueChangedEvent extends BusEventWithPayload<{
-  newState: any;
-  prevState: any;
+export class ContextValueChangedEvent<T> extends BusEventWithPayload<{
+  newState: T;
+  prevState: T;
 }> {
   public static readonly type = 'context-value-changed';
 }

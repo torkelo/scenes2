@@ -13,6 +13,6 @@ export const AUTO_VARIABLE_VALUE = '$__auto';
  * \${(\w+)(?::(\w+))?}             ${var3} or ${var3:fmt3}
  */
 export const VARIABLE_REGEX =
-  /\$(\w+)|\[\[(\w+?)(?::(\w+))?\]\]|\${(\w+)(?:\.([^:^\}]+))?(?::([^\}]+))?}/g;
+  /\$(\w+)|\[\[(\w+?)(?::(\w+))?\]\]|\${(\w+)(?:\.([^:^}]+))?(?::([^}]+))?}/g;
 export const SEARCH_FILTER_VARIABLE = '__searchFilter';
 export const SCOPES_VARIABLE_NAME = '__scopes';

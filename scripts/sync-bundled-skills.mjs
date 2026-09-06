@@ -35,13 +35,7 @@ const repoRoot = path.resolve(
  * `name` maps `.hatch/_skills/<name>/SKILL.md` to
  * `packages/design-catalog/skills/<name>/SKILL.md`.
  */
-const BUNDLED_SKILLS = [
-  'design',
-  'axp-send-feedback',
-  'axp-summarize-session',
-  'axp-diagnostics',
-  'slack-issue',
-];
+const BUNDLED_SKILLS = [];
 
 /** Split a SKILL.md into its YAML frontmatter lines and body. */
 function parseSkill(raw, src) {
@@ -69,6 +63,7 @@ function field(frontmatter, key, src) {
 }
 
 let wrote = 0;
+
 for (const name of BUNDLED_SKILLS) {
   const srcPath = path.join(repoRoot, '.hatch', '_skills', name, 'SKILL.md');
   const destPath = path.join(

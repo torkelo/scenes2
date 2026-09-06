@@ -1,6 +1,5 @@
-import { type Decorator } from '@storybook/react';
+import type { Decorator } from '@storybook/react';
 import * as React from 'react';
-
 import { getThemeById, ThemeContext } from '@grafana/data';
 
 //import { GlobalStyles } from '@grafana/ui/src/themes/GlobalStyles/GlobalStyles';
@@ -12,7 +11,7 @@ const ThemeableStory = ({
   children,
   themeId,
 }: React.PropsWithChildren<ThemeableStoryProps>) => {
-  let theme = getThemeById(themeId);
+  const theme = getThemeById(themeId);
   if (
     theme.name === 'Visual Refresh (Light)' ||
     theme.name === 'Visual Refresh (Dark)'
