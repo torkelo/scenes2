@@ -4,10 +4,10 @@ A rewrite of scenes, optimized for pure React and agentic workflows.
 
 ## Workspace structure
 
-| Location            | Package              | Description                                     |
-| ------------------- | -------------------- | ----------------------------------------------- |
-| `apps/storybook/`   | `@grafana/storybook` | Storybook aggregating stories from all packages |
-| `packages/base-ui/` | `@grafana/scenes2`   | Grafana scenes v2                               |
+| Location            | Package              | Description                                              |
+| ------------------- | -------------------- | -------------------------------------------------------- |
+| `apps/scenarios/`   | `@grafana/scenarios` | Vite app with mocked Grafana runtime for quick e2e tests |
+| `packages/scenes2/` | `@grafana/scenes2`   | Grafana scenes v2                                        |
 
 ## Agent tooling
 
@@ -58,8 +58,8 @@ fails the build if the committed files are out of sync with `.hatch/`.
 ### Setup
 
 ```bash
-git clone git@github.com:grafana/design.git
-cd design
+git clone git@github.com:grafana/scenes2.git
+cd scenes2
 nvm install && nvm use  # use the Node version from .nvmrc
 corepack enable         # skip if you've already run this on this machine
 pnpm install
@@ -70,8 +70,6 @@ pnpm build              # first run — generates catalog artifacts other tasks 
 
 ```bash
 pnpm dev                                 # Start all dev servers
-pnpm --filter @grafana/design-site dev   # Start docs site only
-pnpm --filter @grafana/prototype dev     # Start prototype kit only
 pnpm storybook                           # Start Storybook (port 6006)
 ```
 
@@ -153,60 +151,14 @@ Packages publish to the public npm registry (`npmjs.org`) with
 `access: public` — no `.npmrc` or auth token required:
 
 ```bash
-pnpm add @grafana/base-ui @grafana/design-tokens @grafana/theme-providers
+pnpm add @grafana/scenes2
 ```
 
 Refer to each package's README for usage.
 
 **Core consumer surface** — what a Grafana plugin or app installs to build UI:
 
-- [`@grafana/base-ui`](packages/base-ui/README.md) — Grafana-styled Base UI /
-  shadcn component set. The primary component surface.
-- [`@grafana/components`](packages/components/README.md) — Product Design
-  Engineering's React component library; reach for it where base-ui doesn't
-  cover a component yet.
-- [`@grafana/design-tokens`](packages/design-tokens/README.md) — colors,
-  spacing, and typography tokens, read through `getDesignTokens()`.
-- [`@grafana/theme-providers`](packages/theme-providers/README.md) — the
-  color-mode, theme, and portal context providers the components expect.
-- [`@grafana/icons`](packages/icons/README.md) — typed React icon components
-  wrapping lucide-static and Grafana-specific custom SVGs.
-- [`@grafana/fonts`](packages/fonts/README.md) — self-hosted Inter and
-  JetBrains Mono variable font files, matching the typography tokens.
-- [`@grafana/design-mcp`](packages/design-mcp/README.md) — the MCP server that
-  surfaces this catalog to coding agents (see [Agent tooling](#agent-tooling)).
-
-**Optional:**
-
-- [`@grafana/ai-elements`](packages/ai-elements/README.md) — AI Elements
-  surfaces (chat, reasoning, tool-call, code, canvas), built on `@grafana/base-ui`.
-
-**Tooling:**
-
-- [`@grafana/design-codemods`](packages/design-codemods/README.md) — codemod CLI
-  and migration tables for porting consumers onto these packages.
-
-### Consumer build setup
-
-The components ship an emotion stylesheet with side effects, and the fonts are
-self-hosted files, so a consumer's bundler needs a little wiring: mark the
-design packages' CSS as having side effects so it isn't tree-shaken away (the
-`style-loader` webpack form is in
-[`@grafana/components`](packages/components/README.md)), and hash the font files
-in your asset pipeline. [grafana/design#575](https://github.com/grafana/design/issues/575)
-tracks an `npx` setup script to automate this for consumers.
-
-## Migrating external packages
-
-To bring an existing `@grafana/` repository into the monorepo while preserving
-Git history:
-
-```bash
-./scripts/migrate-package.sh <repo-url> <package-name>
-```
-
-Refer to [MIGRATION.md](MIGRATION.md) for the full process and post-migration
-checklist.
+- [`@grafana/scenes2`](packages/scenes2/README.md) — Scenes 2
 
 ## License
 
