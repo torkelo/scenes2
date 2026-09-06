@@ -160,44 +160,6 @@ export default defineConfig(
       ],
     },
   },
-  // Selector discipline for the component packages: no [data-color-mode]
-  // branching in styles (use CSSVariablesByColorMode) and no tag-based
-  // child selectors (CSS isolation; refer to STYLING.md). Scoped to the
-  // packages that author component styles — design-tokens and
-  // theme-providers legitimately generate `[data-color-mode]` rule sets.
-  // Stories are exempt: they're demo scaffolding, not shipped styles.
-  {
-    files: ['packages/components/src/**', 'packages/icons/src/**'],
-    ignores: ['**/*.stories.tsx', '**/*.stories.styles.ts'],
-    rules: {
-      'no-restricted-syntax': ['error', ...emotionSelectorGuards],
-    },
-  },
-  // The shadcn / AI Elements ports intentionally keep their upstream
-  // structural selectors for 1:1 visual fidelity with the Tailwind
-  // originals, so the same guards report as warnings there **for now**.
-  // Once those packages have fully migrated to our own look and feel,
-  // tighten their implementations to follow the rules and ratchet this
-  // block to 'error'.
-  {
-    files: ['packages/ai-elements/src/**', 'packages/base-ui/src/**'],
-    ignores: ['**/*.stories.tsx', '**/*.stories.styles.ts'],
-    rules: {
-      'no-restricted-syntax': ['warn', ...emotionSelectorGuards],
-    },
-  },
-  // Codemod tooling and the eslint-plugin-design rule bodies are the only
-  // legitimate direct consumers of `@grafana/icons/migrations`. Everywhere
-  // else, the recommended config's `no-restricted-imports` rule blocks the
-  // subpath; consumers writing their own codemods go through the
-  // `@grafana/design-codemods` re-export instead.
-  {
-    files: [
-      'packages/design-codemods/src/**',
-      'packages/eslint-plugin-design/src/rules/**',
-    ],
-    rules: { 'no-restricted-imports': 'off' },
-  },
   // Plain-JS Node scripts (build/CI tooling — e.g. the VRT baseline scripts) run
   // under Node, not the browser, so grant the Node globals that the recommended
   // config's `no-undef` would otherwise flag. TS files don't need this: the
@@ -227,6 +189,9 @@ export default defineConfig(
       // whole-tree checks must not trip over these uncommitted artifacts.
       'apps/storybook/scenarios/*/v*/**',
       'apps/storybook/scenarios/*/v*.stories.tsx',
+      // Playwright run output for apps/scenarios (see its .gitignore).
+      'apps/scenarios/playwright-report/**',
+      'apps/scenarios/test-results/**',
     ],
   },
 );

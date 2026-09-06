@@ -26,9 +26,7 @@ automated consolidations cannot drift):
 
 Run inventory + apply first, then apply YOUR judgment to what they report:
 majors and dashboard-queue decisions (Phase 1.5), unusual downstream
-effects (Phase 4), preflight failures (Phase 7), and anything
-`renameFlags` surfaces (record renames in `renamedIcons` on
-`@grafana/icons/migrations` — see the `icon-renames` codemod). Do NOT use
+effects (Phase 4), preflight failures (Phase 7). Do NOT use
 `publish.mjs`'s main flow in a manual run — it targets the workflow's
 rolling branch; commit and push per Phase 8 instead, and build the body
 with `buildBody(plan, preflight)` via a small `node --input-type=module`

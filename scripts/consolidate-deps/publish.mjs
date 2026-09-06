@@ -70,8 +70,6 @@ const COMMIT_PATHS = [
   /^pnpm-lock\.yaml$/,
   /^\.github\/workflows\/[^/]+\.ya?ml$/,
   /^\.changeset\/[^/]+\.md$/,
-  /^packages\/icons\/src\//,
-  /^packages\/components\/src\/icons-shim\.ts$/,
 ];
 
 function changedFiles() {
@@ -113,23 +111,6 @@ export function buildBody(plan, preflightOutcome, extras = {}) {
       'consolidate-deps skill ran its recovery pass — verify the outcome):',
       '',
       extras.triage.trim(),
-      '',
-    );
-  }
-  if (plan.renameFlags) {
-    lines.push(
-      `> [!WARNING]`,
-      `> **Upstream icon renames need review**: the lucide bump removed ` +
-        `${plan.renameFlags.deleted.map((n) => `\`${n}\``).join(', ')} ` +
-        `(added: ${plan.renameFlags.added.map((n) => `\`${n}\``).join(', ') || 'none'}). ` +
-        `Before merging: record each rename in \`renamedIcons\` on ` +
-        `\`@grafana/icons/migrations\` (and update any \`migrations.ts\` entries ` +
-        `that map to a removed name) so the \`icon-renames\` codemod covers it, ` +
-        `then run \`pnpm --filter=@grafana/icons build\` and ` +
-        `\`pnpm --filter=@grafana/components generate:icons-shim\` and commit ` +
-        `the regenerated \`icons-shim.ts\` — the shim on this branch still ` +
-        `re-exports the removed names until then. Reflect the removal in the ` +
-        `icons changeset.`,
       '',
     );
   }

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scenarios</title>
+    <!-- Grafana's backend normally injects this before any app code runs, and
+         @grafana/runtime reads it at module-evaluation time to build `config`.
+         Seeding the minimum shape here (rather than from a module) guarantees
+         it lands first whatever the import graph looks like. -->
+    <script>
+      window.grafanaBootData = {
+        assets: { dark: '', light: '' },
+        settings: {},
+        user: { theme: 'dark' },
+        navTree: [],
+      };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

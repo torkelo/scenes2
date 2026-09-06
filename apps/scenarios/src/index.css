@@ -1,0 +1,9 @@
+/* Document-level styling (background, typography, scrollbars) comes from
+   @grafana/ui's GlobalStyles, mounted in src/providers/ThemeProvider.tsx.
+   Only the bits GlobalStyles leaves alone belong here. */
+
+html,
+body,
+#root {
+  height: 100%;
+}

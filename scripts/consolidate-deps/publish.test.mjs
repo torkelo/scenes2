@@ -51,17 +51,6 @@ test('omits sections past the length cap and says so', () => {
   assert.match(body, /source PR section\(s\) omitted/);
 });
 
-test('rename flags surface as a warning banner', () => {
-  const body = buildBody(
-    plan({
-      renameFlags: { deleted: ['CircleEuroSign'], added: ['CircleEuro'] },
-    }),
-    'pass',
-  );
-  assert.match(body, /Upstream icon renames need review/);
-  assert.match(body, /`CircleEuroSign`/);
-});
-
 test('renders the summary paragraph above the deterministic sections', () => {
   const body = buildBody(plan(), 'pass', {
     summary: 'A tidy batch of storybook and vite patches.\n',

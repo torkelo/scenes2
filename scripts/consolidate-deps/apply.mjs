@@ -229,79 +229,6 @@ async function main() {
 
   // ── Downstream effects ──
   const lucide = detectLucideBump();
-  let renameFlags = null;
-  if (lucide) {
-    run('pnpm', ['--filter=@grafana/icons', 'run', 'import-icons'], {
-      stdio: 'inherit',
-    });
-    // Detect upstream renames before building: a removed export leaves
-    // `migrations.ts` referencing names that no longer typecheck, so the
-    // build below is best-effort whenever renames are pending.
-    const status = run('git', [
-      'status',
-      '--porcelain',
-      '--',
-      'packages/icons/src',
-    ]);
-    const deleted = [];
-    const added = [];
-    for (const line of status.split('\n')) {
-      const m =
-        /^\s*([AD?])[\s?]+packages\/icons\/src\/components\/Icons\/(\w+)\.tsx$/.exec(
-          line,
-        );
-      if (!m) continue;
-      (m[1] === 'D' ? deleted : added).push(m[2]);
-    }
-    if (deleted.length > 0) {
-      renameFlags = { deleted, added };
-      plan.renameFlags = renameFlags;
-    }
-    // lint:fix loads the root eslint config, which imports the built
-    // @grafana/eslint-plugin-design — absent on a fresh checkout.
-    run(
-      'pnpm',
-      ['turbo', 'run', 'build', '--filter=@grafana/eslint-plugin-design'],
-      { stdio: 'inherit' },
-    );
-    run('pnpm', ['--filter=@grafana/icons', 'run', 'lint:fix'], {
-      stdio: 'inherit',
-    });
-    try {
-      run('pnpm', ['--filter=@grafana/icons', 'build'], { stdio: 'inherit' });
-      run('pnpm', ['--filter=@grafana/components', 'generate:icons-shim'], {
-        stdio: 'inherit',
-      });
-    } catch (err) {
-      // Pending renames are the one expected build failure; the run must
-      // still reach publish so the PR carries `renameFlags`, and preflight
-      // stays red until `renamedIcons` covers the renames (the triage
-      // step's sanctioned recovery). Anything else is a real error.
-      if (!renameFlags) throw err;
-      console.warn(
-        `@grafana/icons build failed with renames pending (${deleted.join(', ')}); ` +
-          'continuing so the PR surfaces renameFlags.',
-      );
-    }
-
-    const renameNote = renameFlags
-      ? `\n**Removed exports (upstream renames): ${renameFlags.deleted.join(', ')}.**\n` +
-        'Before merging, record each rename in `renamedIcons` on\n' +
-        '`@grafana/icons/migrations` so the `icon-renames` codemod covers it,\n' +
-        'then rebuild `@grafana/icons` and re-run\n' +
-        '`pnpm --filter=@grafana/components generate:icons-shim` (the committed\n' +
-        'shim still re-exports the removed names until regenerated), and note\n' +
-        'the removal here.\n'
-      : '';
-    writeFileSync(
-      `.changeset/deps-auto-lucide-${date}.md`,
-      `---\n'@grafana/icons': minor\n---\n\n` +
-        `Update \`lucide-static\` (automated consolidated bump) — new icons\n` +
-        `and refined glyphs; see the\n` +
-        `[lucide release notes](https://github.com/lucide-icons/lucide/releases).\n` +
-        renameNote,
-    );
-  }
 
   const publishable = changedPublishableManifests().filter(
     (name) => !(lucide && name === '@grafana/icons'),
@@ -327,11 +254,6 @@ async function main() {
     `Applied ${applied.length} PR(s); changesets for ${publishable.length} publishable package(s)` +
       (lucide ? ' + icons (minor)' : ''),
   );
-  if (renameFlags) {
-    console.log(
-      `RENAMES NEED HUMAN REVIEW: deleted ${renameFlags.deleted.join(', ')}`,
-    );
-  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

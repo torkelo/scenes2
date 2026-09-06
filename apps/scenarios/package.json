@@ -1,0 +1,36 @@
+{
+  "name": "@grafana/scenarios",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Standalone web app for building scenarios on top of @grafana/scenes2",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "preview": "vite preview",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui"
+  },
+  "dependencies": {
+    "@emotion/css": "^11.13.5",
+    "@grafana/data": "^13.2.0",
+    "@grafana/runtime": "^13.2.0",
+    "@grafana/scenes2": "workspace:*",
+    "@grafana/ui": "^13.2.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router-dom": "6.30.6"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/node": "25.9.5",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "@vitejs/plugin-react": "6.0.5",
+    "typescript": "6.0.3",
+    "vite": "8.2.1"
+  }
+}
