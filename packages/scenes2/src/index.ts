@@ -1,3 +1,10 @@
+export {
+  CacheContext,
+  CacheProvider,
+  type CacheProviderProps,
+  useCache,
+} from './caching/CacheContext';
+export { type CacheEntry, MemoryCache } from './caching/MemoryCache';
 export { TestComp } from './components/TestComp';
 export { VariableValueSelect } from './components/VariableValueSelect/VariableValueSelect';
 export { type VizConfig } from './components/VizPanel/PanelBuilders/types';

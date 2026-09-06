@@ -5,6 +5,15 @@
     // the workspace sources pulled in below (TS6059). Widen it to the repo
     // root; tsc only ever type-checks here (--noEmit), webpack/swc builds.
     "rootDir": "../..",
+    // @grafana/tsconfig targets es2018 and turns on importHelpers, so modern
+    // syntax in the workspace sources below (private class fields) is reported
+    // as needing tslib, which this app does not depend on. Match the repo
+    // baseline target from tsconfig.base.json and inline the helpers instead of
+    // importing them; ts-node compiles .config/webpack with this config, so
+    // both flags have to move together or the helpers end up undefined.
+    "target": "ES2022",
+    "importHelpers": false,
+    "noEmitHelpers": false,
     // Resolve the workspace package to its source so editor go-to-definition
     // lands in packages/scenes2/src instead of the bundled dist/*.d.ts.
     // Re-declares the scaffolded "*" mapping because `paths` replaces the

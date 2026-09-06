@@ -3,14 +3,18 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   plugins: [react()],
-  ssr: {
-    // Force these packages to be bundled instead of externalised; resolves
-    // ESM/CJS compatibility issues when running tests against published
-    // @grafana/* dependencies. Exclude data/runtime/ui — they pull in
-    // uplot and other browser-only modules that crash jsdom on load.
-    noExternal: [/^@grafana\/(?!data|runtime|ui)/, 'react-use'],
-  },
   test: {
+    server: {
+      deps: {
+        // Force these packages through Vite instead of Node's loader; resolves
+        // ESM/CJS compatibility issues when running tests against published
+        // @grafana/* dependencies (@grafana/data imports named exports from
+        // moment-timezone, which only ships CJS). @grafana/runtime and
+        // @grafana/ui stay out: they pull in uplot and other browser-only
+        // modules that crash jsdom on load, so tests that need them mock them.
+        inline: [/@grafana\/(?!runtime|ui)/, /moment/, /react-use/],
+      },
+    },
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],

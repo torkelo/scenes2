@@ -18,6 +18,7 @@
     "lint:fix": {
       "cache": false
     },
+    "e2e": {},
     "test": {
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"]
