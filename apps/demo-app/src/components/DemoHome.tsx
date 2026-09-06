@@ -1,3 +1,4 @@
+import { PluginPage } from '@grafana/runtime';
 import {
   TestVariable,
   useInterpolator,
@@ -9,28 +10,24 @@ import {
   TimeRangeContextProvider,
 } from '@grafana/scenes2';
 import { VisibilityMode } from '@grafana/schema';
-import { Box, GraphGradientMode, LineInterpolation, Stack } from '@grafana/ui';
+import { GraphGradientMode, LineInterpolation, Stack } from '@grafana/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const queryClient = new QueryClient();
 
 export function DemoHome() {
   return (
-    <Box padding={5}>
+    <PluginPage>
       <QueryClientProvider client={queryClient}>
         <TimeRangeContextProvider>
-          <div>
-            <h1>Demo Home</h1>
-
-            <TestVariable name="service" value="" query="A.*" delay={10}>
-              <TestVariable name="pod" value="" query="A.$service.*" delay={20}>
-                <PrintVariable />
-              </TestVariable>
+          <TestVariable name="service" value="" query="A.*" delay={10}>
+            <TestVariable name="pod" value="" query="A.$service.*" delay={20}>
+              <PrintVariable />
             </TestVariable>
-          </div>
+          </TestVariable>
         </TimeRangeContextProvider>
       </QueryClientProvider>
-    </Box>
+    </PluginPage>
   );
 }
 
