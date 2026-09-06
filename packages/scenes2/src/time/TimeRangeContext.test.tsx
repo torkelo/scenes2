@@ -1,9 +1,12 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CacheProvider } from '../caching/CacheContext';
 import { MemoryCache } from '../caching/MemoryCache';
 import { useTimeRange } from '../hooks/useTimeRange';
+import { UrlStateProvider } from '../url/UrlStateContext';
+import { UrlStateRegistry } from '../url/UrlStateRegistry';
 import {
   TimeRangeContextProvider,
   type TimeRangeContextProviderProps,
@@ -15,13 +18,14 @@ vi.mock('@grafana/runtime', () => ({
   config: { bootData: { user: { timezone: 'browser' } } },
 }));
 
-function ShowTimeRange() {
+/** `name` keeps the readouts apart when a test renders nested providers. */
+function ShowTimeRange({ name = 'outer' }: { name?: string }) {
   const { from, to, value, onChangeTimeRange } = useTimeRange();
 
   return (
     <div>
-      <span data-testid="raw">{`${from} to ${to}`}</span>
-      <span data-testid="evaluated">
+      <span data-testid={`${name}-raw`}>{`${from} to ${to}`}</span>
+      <span data-testid={`${name}-evaluated`}>
         {`${value.from.valueOf()}-${value.to.valueOf()}`}
       </span>
       <button
@@ -29,7 +33,7 @@ function ShowTimeRange() {
           onChangeTimeRange({ ...value, raw: { from: 'now-1h', to: 'now' } })
         }
       >
-        last 1h
+        {`${name} last 1h`}
       </button>
     </div>
   );
@@ -48,15 +52,48 @@ function renderWithCache(
   );
 }
 
-function readState() {
+function renderWithUrl(
+  cache: MemoryCache,
+  props: Partial<TimeRangeContextProviderProps> = {},
+  registry?: UrlStateRegistry,
+) {
+  return render(
+    <CacheProvider cache={cache}>
+      <UrlStateProvider registry={registry}>
+        <TimeRangeContextProvider {...props}>
+          <ShowTimeRange />
+        </TimeRangeContextProvider>
+      </UrlStateProvider>
+    </CacheProvider>,
+  );
+}
+
+function renderNestedWithUrl(registry?: UrlStateRegistry) {
+  return render(
+    <UrlStateProvider registry={registry}>
+      <TimeRangeContextProvider>
+        <ShowTimeRange />
+        <TimeRangeContextProvider initFrom="now-2d">
+          <ShowTimeRange name="inner" />
+        </TimeRangeContextProvider>
+      </TimeRangeContextProvider>
+    </UrlStateProvider>,
+  );
+}
+
+function readState(name = 'outer') {
   return {
-    raw: screen.getByTestId('raw').textContent,
-    evaluated: screen.getByTestId('evaluated').textContent,
+    raw: screen.getByTestId(`${name}-raw`).textContent,
+    evaluated: screen.getByTestId(`${name}-evaluated`).textContent,
   };
 }
 
-function selectLast1h() {
-  fireEvent.click(screen.getByRole('button', { name: 'last 1h' }));
+function selectLast1h(name = 'outer') {
+  fireEvent.click(screen.getByRole('button', { name: `${name} last 1h` }));
+}
+
+function queryParams() {
+  return Object.fromEntries(new URL(window.location.href).searchParams);
 }
 
 describe('TimeRangeContextProvider', () => {
@@ -174,5 +211,120 @@ describe('TimeRangeContextProvider', () => {
     renderWithCache(cache, { cacheKey: 'test', initFrom: 'now-12h' });
 
     expect(readState().raw).toBe('now-1h to now');
+  });
+
+  describe('url sync', () => {
+    beforeEach(() => {
+      window.history.replaceState(null, '', '/');
+    });
+
+    it('leaves the URL alone until the range changes', () => {
+      renderWithUrl(cache);
+
+      expect(queryParams()).toEqual({});
+    });
+
+    it('writes the raw range to the URL when it changes', () => {
+      renderWithUrl(cache);
+      selectLast1h();
+
+      expect(queryParams()).toEqual({ from: 'now-1h', to: 'now' });
+    });
+
+    it('does not touch the URL without a UrlStateProvider', () => {
+      renderWithCache(cache);
+      selectLast1h();
+
+      expect(queryParams()).toEqual({});
+    });
+
+    it('starts on the range in the URL instead of initFrom/initTo', () => {
+      window.history.replaceState(null, '', '/?from=now-3h&to=now-1h');
+      renderWithUrl(cache, { initFrom: 'now-6h' });
+
+      expect(readState().raw).toBe('now-3h to now-1h');
+    });
+
+    it('fills the half the URL is missing from initFrom/initTo', () => {
+      window.history.replaceState(null, '', '/?from=now-3h');
+      renderWithUrl(cache, { initTo: 'now-30m' });
+
+      expect(readState().raw).toBe('now-3h to now-30m');
+    });
+
+    it('ignores a range in the URL that does not parse', () => {
+      window.history.replaceState(null, '', '/?from=nonsense&to=now');
+      renderWithUrl(cache, { initFrom: 'now-12h' });
+
+      expect(readState().raw).toBe('now-12h to now');
+    });
+
+    it('prefers the range in the URL over the cached one', () => {
+      renderWithUrl(cache, { cacheKey: 'test' });
+      selectLast1h();
+
+      cleanup();
+      window.history.replaceState(null, '', '/?from=now-12h&to=now');
+      renderWithUrl(cache, { cacheKey: 'test' });
+
+      expect(readState().raw).toBe('now-12h to now');
+    });
+
+    it('gives a nested provider its own numbered keys', () => {
+      renderNestedWithUrl();
+      selectLast1h('inner');
+
+      expect(queryParams()).toEqual({ from2: 'now-1h', to2: 'now' });
+
+      selectLast1h();
+
+      expect(queryParams()).toEqual({
+        from: 'now-1h',
+        to: 'now',
+        from2: 'now-1h',
+        to2: 'now',
+      });
+    });
+
+    it('starts a nested provider on the range its numbered keys hold', () => {
+      window.history.replaceState(
+        null,
+        '',
+        '/?from=now-3h&to=now&from2=now-15m&to2=now',
+      );
+      renderNestedWithUrl();
+
+      expect(readState().raw).toBe('now-3h to now');
+      expect(readState('inner').raw).toBe('now-15m to now');
+    });
+
+    it('gives out the same keys under StrictMode', () => {
+      render(
+        <StrictMode>
+          <UrlStateProvider>
+            <TimeRangeContextProvider>
+              <ShowTimeRange />
+              <TimeRangeContextProvider>
+                <ShowTimeRange name="inner" />
+              </TimeRangeContextProvider>
+            </TimeRangeContextProvider>
+          </UrlStateProvider>
+        </StrictMode>,
+      );
+      selectLast1h('inner');
+
+      expect(queryParams()).toEqual({ from2: 'now-1h', to2: 'now' });
+    });
+
+    it('hands the keys back when a provider unmounts', () => {
+      const registry = new UrlStateRegistry();
+
+      renderNestedWithUrl(registry);
+      cleanup();
+      renderWithUrl(cache, {}, registry);
+      selectLast1h();
+
+      expect(queryParams()).toEqual({ from: 'now-1h', to: 'now' });
+    });
   });
 });

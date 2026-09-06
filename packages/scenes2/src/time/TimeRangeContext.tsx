@@ -4,6 +4,7 @@ import { getTimeZone, type TimeRange } from '@grafana/data';
 import type { TimeZone } from '@grafana/schema';
 
 import { useCache } from '../caching/CacheContext';
+import { useUrlSync } from '../url/UrlStateContext';
 import { evaluateTimeRange, getValidTimeZone, isValid } from './utils';
 
 /** The part of the state that a `cacheKey` remembers across an unmount. */
@@ -24,6 +25,12 @@ export const TimeRangeContext = createContext<
 
 /** How long a cached time range stays usable when no staleTime is given. */
 const defaultStaleTime = 30000;
+
+/**
+ * The query-string keys the range syncs to, before the registry resolves
+ * conflicts. A provider nested inside another one syncs to `from2`/`to2`.
+ */
+const urlKeys = ['from', 'to'];
 
 export interface TimeRangeContextProviderProps {
   initFrom?: string;
@@ -48,6 +55,15 @@ export interface TimeRangeContextProviderProps {
   children: React.ReactNode;
 }
 
+/**
+ * Holds the time range for the subtree below it.
+ *
+ * With a `UrlStateProvider` mounted above, the raw range syncs to the `from`
+ * and `to` query parameters: a range in the URL is what the provider mounts
+ * on, and changing the range replaces the current history entry with the new
+ * one. Nested providers sync to numbered keys — `from2`/`to2` for the second
+ * one on the page — so an inner range never overwrites the outer one.
+ */
 export function TimeRangeContextProvider(props: TimeRangeContextProviderProps) {
   const state = useTimeRangeState(props);
 
@@ -67,14 +83,42 @@ function useTimeRangeState({
 }: TimeRangeContextProviderProps): TimeRangeContextState {
   const validTimeZone = getValidTimeZone(timeZone) || getTimeZone();
   const cache = useCache();
+  const url = useUrlSync(urlKeys);
 
   const [state, setState] = React.useState<CachedTimeRangeState>(() => {
     const cached = cacheKey
       ? cache.get<CachedTimeRangeState>(cacheKey)
       : undefined;
 
+    const urlFrom = fromUrl(url?.get('from'));
+    const urlTo = fromUrl(url?.get('to'));
+
+    // A range in the URL is what the user linked to, so it wins over both the
+    // cache and initFrom/initTo. Either half can be missing, and the other
+    // sources fill in the rest.
+    if (urlFrom || urlTo) {
+      return initState(
+        urlFrom ?? cached?.from ?? initFrom,
+        urlTo ?? cached?.to ?? initTo,
+        validTimeZone,
+      );
+    }
+
     return cached ?? initState(initFrom, initTo, validTimeZone);
   });
+
+  // The range the provider mounted on. Until the range moves off it there is
+  // nothing worth writing, which keeps the keys out of the URL of a page the
+  // user has not touched the time picker on.
+  const mountedState = React.useRef(state);
+
+  React.useEffect(() => {
+    if (state === mountedState.current) {
+      return;
+    }
+
+    url?.set({ from: state.from, to: state.to });
+  }, [url, state]);
 
   React.useEffect(() => {
     if (!cacheKey) {
@@ -128,6 +172,11 @@ function useTimeRangeState({
     () => ({ ...state, onChangeTimeRange }),
     [state, onChangeTimeRange],
   );
+}
+
+/** Keeps a raw range the URL carries, and drops one that does not parse. */
+function fromUrl(value: string | undefined): string | undefined {
+  return value && isValid(value) ? value : undefined;
 }
 
 function initState(

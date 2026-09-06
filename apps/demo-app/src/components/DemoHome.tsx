@@ -8,6 +8,7 @@ import {
   VariableValueSelect,
   TimeRangeContextPicker,
   TimeRangeContextProvider,
+  UrlStateProvider,
 } from '@grafana/scenes2';
 import { VisibilityMode } from '@grafana/schema';
 import { GraphGradientMode, LineInterpolation, Stack } from '@grafana/ui';
@@ -19,13 +20,15 @@ export function DemoHome() {
   return (
     <PluginPage>
       <QueryClientProvider client={queryClient}>
-        <TimeRangeContextProvider cacheKey="DemoHome" staleTime={30000}>
-          <TestVariable name="service" value="" query="A.*" delay={10}>
-            <TestVariable name="pod" value="" query="A.$service.*" delay={20}>
-              <PrintVariable />
+        <UrlStateProvider>
+          <TimeRangeContextProvider cacheKey="DemoHome" staleTime={30000}>
+            <TestVariable name="service" value="" query="A.*" delay={10}>
+              <TestVariable name="pod" value="" query="A.$service.*" delay={20}>
+                <PrintVariable />
+              </TestVariable>
             </TestVariable>
-          </TestVariable>
-        </TimeRangeContextProvider>
+          </TimeRangeContextProvider>
+        </UrlStateProvider>
       </QueryClientProvider>
     </PluginPage>
   );

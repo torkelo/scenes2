@@ -18,5 +18,14 @@ export {
   TimeRangeContextProvider,
 } from './time/TimeRangeContext';
 export { TimeRangeContextPicker } from './time/TimeRangeContextPicker';
+export {
+  UrlStateContext,
+  UrlStateProvider,
+  type UrlStateProviderProps,
+  type UrlStateSync,
+  useUrlState,
+  useUrlSync,
+} from './url/UrlStateContext';
+export { UrlStateRegistry } from './url/UrlStateRegistry';
 export { useInterpolator } from './variables/interpolation/useInterpolator';
 export { TestVariable } from './variables/TestVariable';
