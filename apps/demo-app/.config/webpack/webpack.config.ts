@@ -89,7 +89,7 @@ const config = async (env: Env): Promise<Configuration> => {
             options: {
               jsc: {
                 baseUrl: path.resolve(process.cwd(), SOURCE_DIR),
-                target: 'es2015',
+                target: 'es2022',
                 loose: false,
                 parser: {
                   syntax: 'typescript',
@@ -100,6 +100,7 @@ const config = async (env: Env): Promise<Configuration> => {
                 transform: {
                   react: {
                     runtime: 'automatic',
+                    development: false,
                   },
                 },
               },

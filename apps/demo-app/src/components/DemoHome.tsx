@@ -55,6 +55,8 @@ function PrintVariable() {
     maxDataPoints: 30,
   });
 
+  console.log('alias', alias);
+
   return (
     <div>
       <Stack direction="column" gap={3}>
