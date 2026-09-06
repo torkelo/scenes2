@@ -4,10 +4,10 @@ A rewrite of scenes, optimized for pure React and agentic workflows.
 
 ## Workspace structure
 
-| Location            | Package              | Description                                              |
-| ------------------- | -------------------- | -------------------------------------------------------- |
-| `apps/scenarios/`   | `@grafana/scenarios` | Vite app with mocked Grafana runtime for quick e2e tests |
-| `packages/scenes2/` | `@grafana/scenes2`   | Grafana scenes v2                                        |
+| Location            | Package            | Description                                              |
+| ------------------- | ------------------ | -------------------------------------------------------- |
+| `packages/scenes2/` | `@grafana/scenes2` | Grafana scenes v2                                        |
+| `apps/scenarios/`   |                    | Vite app with mocked Grafana runtime for quick e2e tests |
 
 ## Agent tooling
 

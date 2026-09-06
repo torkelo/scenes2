@@ -4,17 +4,6 @@ import type { VariableType } from '@grafana/data';
 export type VariableValue = VariableValueSingle | VariableValueSingle[];
 export type VariableValueSingle = string | boolean | number | null;
 
-export interface SceneVariable {
-  type: VariableType;
-  name: string;
-  label?: string;
-  skipUrlSync?: boolean;
-  loading?: boolean;
-  error?: Error | null;
-  description?: string | null;
-  showInControlsMenu?: boolean;
-}
-
 export interface VariableContextState {
   name: string;
   value: VariableValue;
