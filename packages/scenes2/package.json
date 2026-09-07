@@ -42,7 +42,8 @@
   "peerDependencies": {
     "motion": "^12.40.0 || ^13.0.0",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "react-router-dom": "6.30.6"
   },
   "dependencies": {
     "@emotion/css": "^11.13.5",

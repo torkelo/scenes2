@@ -105,7 +105,7 @@ export class UrlStateRegistry {
       return;
     }
 
-    window.history.replaceState(window.history.state, '', url);
+    window.history.pushState(window.history.state, '', url);
   }
 
   /**
