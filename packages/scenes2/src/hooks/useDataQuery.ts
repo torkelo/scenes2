@@ -51,6 +51,8 @@ export function useDataQuery<T extends DataQuery>(
     staleTime: Infinity,
   });
 
+  console.log('useDataQuery');
+
   const loadPreviousData = (queryKey: QueryKey) => () => {
     const data = queryClient.getQueriesData<PanelData>({ queryKey });
     const avail = data.filter((x) => !!x[1]);

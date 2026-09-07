@@ -7,6 +7,11 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+    // Embed the original TS in the .js.map. Consumers bundle our dist/ output
+    // and forward these maps into their own build, but they can't read our
+    // sources off disk — without sourcesContent, devtools resolves each source
+    // to a bare "webpack://" URL and fails to load it (ERR_UNKNOWN_URL_SCHEME).
+    "inlineSources": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

@@ -13,6 +13,7 @@ import {
 import { VisibilityMode } from '@grafana/schema';
 import { GraphGradientMode, LineInterpolation, Stack } from '@grafana/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
 
 const queryClient = new QueryClient();
 
@@ -41,7 +42,7 @@ const plainViz = VizConfigBuilders.timeseries()
   .setCustomFieldConfig('showPoints', VisibilityMode.Never)
   .build();
 
-function PrintVariable() {
+const PrintVariable = React.memo(function PrintVariable() {
   const alias = useInterpolator('service=${service} pod=${pod}');
   const data = useDataQuery({
     queries: [
@@ -68,4 +69,4 @@ function PrintVariable() {
       </Stack>
     </div>
   );
-}
+});
