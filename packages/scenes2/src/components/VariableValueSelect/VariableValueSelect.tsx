@@ -1,3 +1,4 @@
+import { isArray } from 'lodash';
 import { Combobox, type ComboboxOption, Field } from '@grafana/ui';
 
 import { useVariable } from '../../hooks/useVariable';
@@ -16,7 +17,10 @@ export function VariableValueSelect({
 
   const comboboxOptions = options.map((x) => ({ value: x, label: x }));
   const onChange = (newValue: ComboboxOption<string>) => {
-    variable.changeValueTo(newValue.value);
+    variable.changeValueTo({
+      value: newValue.value,
+      label: newValue.label ?? newValue.value,
+    });
   };
 
   const value = getComboboxValue(variable);
@@ -29,8 +33,14 @@ export function VariableValueSelect({
 }
 
 function getComboboxValue(variable: VariableContextState) {
-  if (typeof variable.value === 'string') {
-    return variable.value;
+  if (isArray(variable.value)) {
+    throw new Error(
+      'VariableValueSelect does not support multi-value variables',
+    );
+  }
+
+  if (typeof variable.value.value === 'string') {
+    return variable.value.value;
   }
 
   return JSON.stringify(variable.value);

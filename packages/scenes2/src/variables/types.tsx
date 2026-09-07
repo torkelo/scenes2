@@ -1,24 +1,34 @@
 import { createContext } from 'react';
 import type { VariableType } from '@grafana/data';
 
-export type VariableValue = VariableValueSingle | VariableValueSingle[];
-export type VariableValueSingle = string | boolean | number | null;
+export type VariableValueSingle = {
+  label: string;
+  value: string | number | boolean | object | null | undefined;
+};
 
-export interface VariableContextState {
-  name: string;
-  value: VariableValue;
-  loading?: boolean;
-  error?: Error | null;
-  getValue(fieldPath?: string): VariableValue | undefined | null;
-  changeValueTo(value: VariableValue): void;
-  setLoading?(loading: boolean): void;
-  setError?(error: Error | null): void;
-  parent?: VariableContextState;
+export type VariableValue = VariableValueSingle | VariableValueSingle[];
+export interface VariableValueOption {
+  label: string;
+  value: VariableValueSingle;
+  properties: Record<string, unknown>;
+  group?: string;
 }
 
-export const VariableContext = createContext<VariableContextState | undefined>(
-  undefined,
-);
+export interface VariableContextState<T> {
+  name: string;
+  value: T;
+  loading?: boolean;
+  error?: Error | null;
+  getValue(fieldPath?: string): unknown;
+  changeValueTo(value: T): void;
+  setLoading?(loading: boolean): void;
+  setError?(error: Error | null): void;
+  parent?: VariableContextState<unknown>;
+}
+
+export const VariableContext = createContext<
+  VariableContextState<unknown> | undefined
+>(undefined);
 
 /**
  * Used in CustomFormatterFn

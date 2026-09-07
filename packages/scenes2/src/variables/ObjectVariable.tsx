@@ -1,31 +1,23 @@
 import React, { useContext } from 'react';
 
-import {
-  VariableContext,
-  type VariableValueSingle,
-  type VariableContextState,
-} from './types';
+import { VariableContext, type VariableContextState } from './types';
 
-export interface TestVariableProps {
+export interface ObjectVariableProps<T extends object> {
   name: string;
-  value: string;
-  label?: string;
-  query?: string;
+  value: T;
   children: React.ReactNode;
 }
 
-export function TestVariable({
+export function ObjectVariable<T extends object>({
   name,
   value,
-  label,
   children,
-  query,
-}: TestVariableProps) {
+}: ObjectVariableProps<T>) {
   const parentContext = useContext(VariableContext);
   const context = useVariableContextState({
     name,
-    value: { value, label: label || value },
-    loading: query ? true : false,
+    value: { value, label: value },
+    loading: false,
     parent: parentContext,
   });
 
@@ -36,30 +28,29 @@ export function TestVariable({
   );
 }
 
-interface VariableValueStateInput {
+interface VariableValueStateInput<T> {
   name: string;
-  label?: string;
-  value: VariableValueSingle;
+  value: T;
   loading?: boolean;
   parent?: VariableContextState<unknown>;
 }
 
-function useVariableContextState(
-  input: VariableValueStateInput,
-): VariableContextState<VariableValueSingle> {
+function useVariableContextState<T>(
+  input: VariableValueStateInput<T>,
+): VariableContextState<T> {
   const [loading, setLoading] = React.useState(input.loading);
-  const [value, setValue] = React.useState<VariableValueSingle>(input.value);
+  const [value, setValue] = React.useState<T>(input.value);
   const [error, setError] = React.useState<Error | null>(null);
 
   return {
     name: input.name,
-    value,
+    value: value,
     loading,
     error,
     getValue: (_?: string) => {
-      return value.value;
+      return value;
     },
-    changeValueTo: (newValue: VariableValueSingle) => {
+    changeValueTo: (newValue: T) => {
       setValue(newValue);
     },
     setLoading,

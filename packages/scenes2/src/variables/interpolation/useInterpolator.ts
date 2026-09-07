@@ -28,7 +28,7 @@ export function useInterpolator(
 
 function interpolate(
   target: string,
-  context: VariableContextState,
+  context: VariableContextState<unknown>,
   scopedVars?: ScopedVars,
   _format?: InterpolationFormatParameter,
 ): string {
@@ -54,9 +54,9 @@ function lookupVariable(
   name: string,
   _match: string,
   _scopedVars: ScopedVars | undefined,
-  context: VariableContextState,
-): VariableContextState | undefined {
-  let current: VariableContextState | undefined = context;
+  context: VariableContextState<unknown>,
+): VariableContextState<unknown> | undefined {
+  let current: VariableContextState<unknown> | undefined = context;
 
   while (current) {
     if (current.name === name) {
