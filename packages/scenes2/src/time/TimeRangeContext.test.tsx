@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { StrictMode } from 'react';
+import { BrowserRouter, MemoryRouter, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CacheProvider } from '../caching/CacheContext';
@@ -58,27 +59,55 @@ function renderWithUrl(
   registry?: UrlStateRegistry,
 ) {
   return render(
-    <CacheProvider cache={cache}>
-      <UrlStateProvider registry={registry}>
-        <TimeRangeContextProvider {...props}>
-          <ShowTimeRange />
-        </TimeRangeContextProvider>
-      </UrlStateProvider>
-    </CacheProvider>,
+    <BrowserRouter>
+      <CacheProvider cache={cache}>
+        <UrlStateProvider registry={registry}>
+          <TimeRangeContextProvider {...props}>
+            <ShowTimeRange />
+          </TimeRangeContextProvider>
+        </UrlStateProvider>
+      </CacheProvider>
+    </BrowserRouter>,
   );
 }
 
 function renderNestedWithUrl(registry?: UrlStateRegistry) {
   return render(
-    <UrlStateProvider registry={registry}>
-      <TimeRangeContextProvider>
-        <ShowTimeRange />
-        <TimeRangeContextProvider initFrom="now-2d">
-          <ShowTimeRange name="inner" />
+    <BrowserRouter>
+      <UrlStateProvider registry={registry}>
+        <TimeRangeContextProvider>
+          <ShowTimeRange />
+          <TimeRangeContextProvider initFrom="now-2d">
+            <ShowTimeRange name="inner" />
+          </TimeRangeContextProvider>
         </TimeRangeContextProvider>
-      </TimeRangeContextProvider>
-    </UrlStateProvider>,
+      </UrlStateProvider>
+    </BrowserRouter>,
   );
+}
+
+/** Changes the query string the way the rest of the app would. */
+function GoTo({ search }: { search: string }) {
+  const navigate = useNavigate();
+
+  return (
+    <button onClick={() => navigate({ search })}>{`go to ${search}`}</button>
+  );
+}
+
+function goTo(search: string) {
+  fireEvent.click(screen.getByRole('button', { name: `go to ${search}` }));
+}
+
+/** Steps back through the router history, the way the back button would. */
+function GoBack() {
+  const navigate = useNavigate();
+
+  return <button onClick={() => navigate(-1)}>go back</button>;
+}
+
+function goBack() {
+  fireEvent.click(screen.getByRole('button', { name: 'go back' }));
 }
 
 function readState(name = 'outer') {
@@ -301,14 +330,16 @@ describe('TimeRangeContextProvider', () => {
     it('gives out the same keys under StrictMode', () => {
       render(
         <StrictMode>
-          <UrlStateProvider>
-            <TimeRangeContextProvider>
-              <ShowTimeRange />
+          <BrowserRouter>
+            <UrlStateProvider>
               <TimeRangeContextProvider>
-                <ShowTimeRange name="inner" />
+                <ShowTimeRange />
+                <TimeRangeContextProvider>
+                  <ShowTimeRange name="inner" />
+                </TimeRangeContextProvider>
               </TimeRangeContextProvider>
-            </TimeRangeContextProvider>
-          </UrlStateProvider>
+            </UrlStateProvider>
+          </BrowserRouter>
         </StrictMode>,
       );
       selectLast1h('inner');
@@ -325,6 +356,82 @@ describe('TimeRangeContextProvider', () => {
       selectLast1h();
 
       expect(queryParams()).toEqual({ from: 'now-1h', to: 'now' });
+    });
+
+    it('adds a history entry for a range the user picked', () => {
+      renderWithUrl(cache);
+      const { length } = window.history;
+
+      selectLast1h();
+
+      expect(window.history.length).toBe(length + 1);
+    });
+  });
+
+  describe('url subscription', () => {
+    function renderInRouter(entry: string, props = {}) {
+      return render(
+        <MemoryRouter initialEntries={[entry]}>
+          <UrlStateProvider>
+            <TimeRangeContextProvider {...props}>
+              <ShowTimeRange />
+            </TimeRangeContextProvider>
+            <GoTo search="?from=now-15m&to=now" />
+            <GoTo search="?from=now-2d" />
+            <GoTo search="?from=nonsense" />
+            <GoBack />
+          </UrlStateProvider>
+        </MemoryRouter>,
+      );
+    }
+
+    it('follows a range the rest of the app puts in the URL', () => {
+      renderInRouter('/');
+
+      expect(readState().raw).toBe('now-6h to now');
+
+      goTo('?from=now-15m&to=now');
+
+      expect(readState().raw).toBe('now-15m to now');
+    });
+
+    it('re-evaluates the range it follows to', () => {
+      renderInRouter('/?from=now-15m&to=now');
+      const before = readState();
+
+      goTo('?from=now-2d');
+      vi.advanceTimersByTime(60000);
+      goTo('?from=now-15m&to=now');
+
+      expect(readState().raw).toBe(before.raw);
+      expect(readState().evaluated).not.toBe(before.evaluated);
+    });
+
+    it('keeps the half the URL drops', () => {
+      renderInRouter('/?from=now-3h&to=now-1h');
+
+      goTo('?from=now-2d');
+
+      expect(readState().raw).toBe('now-2d to now-1h');
+    });
+
+    it('ignores a range the URL carries that does not parse', () => {
+      renderInRouter('/?from=now-3h&to=now');
+
+      goTo('?from=nonsense');
+
+      expect(readState().raw).toBe('now-3h to now');
+    });
+
+    it('goes back to the range the previous history entry holds', () => {
+      renderInRouter('/?from=now-3h&to=now');
+
+      selectLast1h();
+      expect(readState().raw).toBe('now-1h to now');
+
+      goBack();
+
+      expect(readState().raw).toBe('now-3h to now');
     });
   });
 });

@@ -76,6 +76,7 @@
     "motion": "^13.0.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "react-router-dom": "6.30.6",
     "recharts": "3.10.1",
     "rollup": "4.62.4",
     "rollup-plugin-dts": "6.5.1",

@@ -19,11 +19,12 @@ export {
 } from './time/TimeRangeContext';
 export { TimeRangeContextPicker } from './time/TimeRangeContextPicker';
 export {
+  type UrlState,
   UrlStateContext,
   UrlStateProvider,
   type UrlStateProviderProps,
-  type UrlStateSync,
-  useUrlState,
+  type UrlSync,
+  type UrlValues,
   useUrlSync,
 } from './url/UrlStateContext';
 export { UrlStateRegistry } from './url/UrlStateRegistry';

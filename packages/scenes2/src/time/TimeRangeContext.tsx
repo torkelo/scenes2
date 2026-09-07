@@ -1,6 +1,12 @@
-import { createContext, useMemo } from 'react';
+import {
+  createContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import React from 'react';
-import { getTimeZone, type TimeRange } from '@grafana/data';
+import { type DateTime, getTimeZone, type TimeRange } from '@grafana/data';
 import type { TimeZone } from '@grafana/schema';
 
 import { useCache } from '../caching/CacheContext';
@@ -26,11 +32,21 @@ export const TimeRangeContext = createContext<
 /** How long a cached time range stays usable when no staleTime is given. */
 const defaultStaleTime = 30000;
 
+/** The range a provider falls back to, and what an unparsable prop lands on. */
+const defaultFrom = 'now-6h';
+const defaultTo = 'now';
+
+/** The raw range as the query string carries it. */
+interface TimeRangeUrlState {
+  from: string;
+  to: string;
+}
+
 /**
  * The query-string keys the range syncs to, before the registry resolves
  * conflicts. A provider nested inside another one syncs to `from2`/`to2`.
  */
-const urlKeys = ['from', 'to'];
+const urlKeys = ['from', 'to'] as const;
 
 export interface TimeRangeContextProviderProps {
   initFrom?: string;
@@ -59,10 +75,11 @@ export interface TimeRangeContextProviderProps {
  * Holds the time range for the subtree below it.
  *
  * With a `UrlStateProvider` mounted above, the raw range syncs to the `from`
- * and `to` query parameters: a range in the URL is what the provider mounts
- * on, and changing the range replaces the current history entry with the new
- * one. Nested providers sync to numbered keys — `from2`/`to2` for the second
- * one on the page — so an inner range never overwrites the outer one.
+ * and `to` query parameters: a range in the URL is what the provider mounts on,
+ * changing the range adds a history entry for the new one, and going back to an
+ * earlier entry moves the range with it. Nested providers sync to numbered
+ * keys — `from2`/`to2` for the second one on the page — so an inner range never
+ * overwrites the outer one.
  */
 export function TimeRangeContextProvider(props: TimeRangeContextProviderProps) {
   const state = useTimeRangeState(props);
@@ -75,52 +92,49 @@ export function TimeRangeContextProvider(props: TimeRangeContextProviderProps) {
 }
 
 function useTimeRangeState({
-  initFrom = 'now-6h',
-  initTo = 'now',
+  initFrom = defaultFrom,
+  initTo = defaultTo,
   timeZone,
   cacheKey,
   staleTime = defaultStaleTime,
 }: TimeRangeContextProviderProps): TimeRangeContextState {
   const validTimeZone = getValidTimeZone(timeZone) || getTimeZone();
   const cache = useCache();
-  const url = useUrlSync(urlKeys);
 
-  const [state, setState] = React.useState<CachedTimeRangeState>(() => {
+  const [state, setState] = useState<CachedTimeRangeState>(() => {
     const cached = cacheKey
       ? cache.get<CachedTimeRangeState>(cacheKey)
       : undefined;
 
-    const urlFrom = fromUrl(url?.get('from'));
-    const urlTo = fromUrl(url?.get('to'));
-
-    // A range in the URL is what the user linked to, so it wins over both the
-    // cache and initFrom/initTo. Either half can be missing, and the other
-    // sources fill in the rest.
-    if (urlFrom || urlTo) {
-      return initState(
-        urlFrom ?? cached?.from ?? initFrom,
-        urlTo ?? cached?.to ?? initTo,
+    return (
+      cached ??
+      evaluate(
+        validRaw(initFrom) ?? defaultFrom,
+        validRaw(initTo) ?? defaultTo,
         validTimeZone,
-      );
-    }
-
-    return cached ?? initState(initFrom, initTo, validTimeZone);
+      )
+    );
   });
 
-  // The range the provider mounted on. Until the range moves off it there is
-  // nothing worth writing, which keeps the keys out of the URL of a page the
-  // user has not touched the time picker on.
-  const mountedState = React.useRef(state);
+  // A range in the URL is what the user linked to, so it wins over both the
+  // cache and initFrom/initTo. Either half can be missing, and the range the
+  // state already holds fills in the rest. The same rule covers a later change
+  // to the URL, whether it came from the back button or from somewhere else in
+  // the app.
+  const url = useUrlSync<TimeRangeUrlState>(urlKeys, (values) =>
+    setState((current) => {
+      const from = validRaw(values.from) ?? current.from;
+      const to = validRaw(values.to) ?? current.to;
 
-  React.useEffect(() => {
-    if (state === mountedState.current) {
-      return;
-    }
+      if (from === current.from && to === current.to) {
+        return current;
+      }
 
-    url?.set({ from: state.from, to: state.to });
-  }, [url, state]);
+      return evaluate(from, to, validTimeZone);
+    }),
+  );
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!cacheKey) {
       return;
     }
@@ -134,39 +148,16 @@ function useTimeRangeState({
     cache.set(cacheKey, state, staleTime);
   }, [cache, cacheKey, staleTime, state]);
 
-  const onChangeTimeRange = React.useCallback((timeRange: TimeRange) => {
-    setState((_) => {
-      let from: string;
-      let to: string;
+  const onChangeTimeRange = useCallback(
+    (timeRange: TimeRange) => {
+      const from = rawToString(timeRange.raw.from);
+      const to = rawToString(timeRange.raw.to);
 
-      if (typeof timeRange.raw.from === 'string') {
-        from = timeRange.raw.from;
-      } else {
-        from = timeRange.raw.from.toISOString();
-      }
-
-      if (typeof timeRange.raw.to === 'string') {
-        to = timeRange.raw.to;
-      } else {
-        to = timeRange.raw.to.toISOString();
-      }
-
-      const newRange = evaluateTimeRange(
-        from,
-        to,
-        validTimeZone,
-        undefined,
-        undefined,
-        undefined,
-        //this.getTimeZone(),
-        //this.state.fiscalYearStartMonth,
-        //this.state.UNSAFE_nowDelay,
-        //this.state.weekStart,
-      );
-
-      return { from, to, value: newRange };
-    });
-  }, []);
+      setState(evaluate(from, to, validTimeZone));
+      url.set({ from, to });
+    },
+    [url, validTimeZone],
+  );
 
   return useMemo(
     () => ({ ...state, onChangeTimeRange }),
@@ -174,19 +165,21 @@ function useTimeRangeState({
   );
 }
 
-/** Keeps a raw range the URL carries, and drops one that does not parse. */
-function fromUrl(value: string | undefined): string | undefined {
+/** Keeps a raw range that parses, and drops one that does not. */
+function validRaw(value: string | undefined): string | undefined {
   return value && isValid(value) ? value : undefined;
 }
 
-function initState(
-  initFrom: string,
-  initTo: string,
+/** The raw bound as the query string and the cache carry it. */
+function rawToString(bound: DateTime | string): string {
+  return typeof bound === 'string' ? bound : bound.toISOString();
+}
+
+function evaluate(
+  from: string,
+  to: string,
   timeZone: TimeZone,
 ): CachedTimeRangeState {
-  const from = initFrom && isValid(initFrom) ? initFrom : 'now-6h';
-  const to = initTo && isValid(initTo) ? initTo : 'now';
-
   return {
     from,
     to,

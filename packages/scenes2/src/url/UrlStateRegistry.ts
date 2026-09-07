@@ -1,6 +1,5 @@
 /**
- * Hands out the query-string keys that state providers sync to, and reads and
- * writes those keys in the current URL.
+ * Hands out the query-string keys that state providers sync to.
  *
  * Two providers cannot both own the same key, so the second one to ask for it
  * is given a numbered key instead: the first `TimeRangeContextProvider` on the
@@ -8,8 +7,9 @@
  * An owner holds its keys until it releases them, at which point the numbers
  * go back to whoever asks next.
  *
- * Writes replace the current history entry, so syncing state to the URL never
- * adds to the back stack.
+ * The registry only allocates names. Reading and writing them is the job of
+ * `UrlStateProvider`, which goes through the router so that a write reaches
+ * everyone subscribed to the location.
  */
 export class UrlStateRegistry {
   /** Owner id to the keys it asked for, mapped to the keys it was given. */
@@ -73,39 +73,6 @@ export class UrlStateRegistry {
     }
 
     this.#claims.delete(owner);
-  }
-
-  /** Returns the value the URL holds for `urlKey`, or undefined when it has none. */
-  public read(urlKey: string): string | undefined {
-    return new URL(window.location.href).searchParams.get(urlKey) ?? undefined;
-  }
-
-  /**
-   * Writes `values` to the query string, replacing the current history entry.
-   * A value of `undefined` removes its key. Writing values the URL already
-   * holds leaves the history entry alone.
-   */
-  public write(values: Record<string, string | undefined>): void {
-    const url = new URL(window.location.href);
-    let changed = false;
-
-    for (const [urlKey, value] of Object.entries(values)) {
-      if (value === undefined) {
-        if (url.searchParams.has(urlKey)) {
-          url.searchParams.delete(urlKey);
-          changed = true;
-        }
-      } else if (url.searchParams.get(urlKey) !== value) {
-        url.searchParams.set(urlKey, value);
-        changed = true;
-      }
-    }
-
-    if (!changed) {
-      return;
-    }
-
-    window.history.pushState(window.history.state, '', url);
   }
 
   /**

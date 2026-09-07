@@ -1,16 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { UrlStateRegistry } from './UrlStateRegistry';
-
-function search() {
-  return new URL(window.location.href).search;
-}
 
 describe('UrlStateRegistry', () => {
   let registry: UrlStateRegistry;
 
   beforeEach(() => {
-    window.history.replaceState(null, '', '/');
     registry = new UrlStateRegistry();
   });
 
@@ -99,59 +94,6 @@ describe('UrlStateRegistry', () => {
       registry.release('nobody');
 
       expect(registry.claim('a', ['from'])).toEqual({ from: 'from' });
-    });
-  });
-
-  describe('read and write', () => {
-    it('reads a key from the query string', () => {
-      window.history.replaceState(null, '', '/?from=now-3h');
-
-      expect(registry.read('from')).toBe('now-3h');
-      expect(registry.read('to')).toBeUndefined();
-    });
-
-    it('writes without adding a history entry', () => {
-      const { length } = window.history;
-
-      registry.write({ from: 'now-1h', to: 'now' });
-
-      expect(search()).toBe('?from=now-1h&to=now');
-      expect(window.history.length).toBe(length);
-    });
-
-    it('leaves the rest of the query string alone', () => {
-      window.history.replaceState(null, '', '/dash?orgId=1&from=now-6h');
-
-      registry.write({ from: 'now-1h' });
-
-      expect(window.location.pathname).toBe('/dash');
-      expect(search()).toBe('?orgId=1&from=now-1h');
-    });
-
-    it('removes a key written as undefined', () => {
-      window.history.replaceState(null, '', '/?from=now-6h&to=now');
-
-      registry.write({ from: undefined });
-
-      expect(search()).toBe('?to=now');
-    });
-
-    it('does not touch history when the URL already holds the values', () => {
-      window.history.replaceState(null, '', '/?from=now-6h');
-      const replaceState = vi.spyOn(window.history, 'replaceState');
-
-      registry.write({ from: 'now-6h', to: undefined });
-
-      expect(replaceState).not.toHaveBeenCalled();
-      replaceState.mockRestore();
-    });
-
-    it('keeps the history state across a write', () => {
-      window.history.replaceState({ marker: 1 }, '', '/');
-
-      registry.write({ from: 'now-1h' });
-
-      expect(window.history.state).toEqual({ marker: 1 });
     });
   });
 });
