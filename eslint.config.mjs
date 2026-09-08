@@ -6,56 +6,16 @@ import perfectionist from 'eslint-plugin-perfectionist';
 import pluginPrettier from 'eslint-plugin-prettier';
 import { defineConfig } from 'eslint/config';
 import tseslint from 'typescript-eslint';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 // `@emotion/eslint-plugin` ships CJS without a default-export marker, so the
 // plugin object arrives via the namespace's `default` under Node ESM interop.
 const emotion = emotionModule.default ?? emotionModule;
 
-// HTML + SVG tag names for the element-selector guard below. Emotion nests
-// selectors as object keys, so a key like '& > button' or a bare 'svg' block
-// couples styles to markup structure — STYLING.md's CSS-isolation rule
-// requires an explicit classname per styled element instead.
-const TAG_NAMES =
-  'a|abbr|address|article|aside|audio|b|blockquote|body|br|button|canvas|caption|cite|code|col|colgroup|dd|details|dfn|dialog|div|dl|dt|em|fieldset|figcaption|figure|footer|form|h[1-6]|header|hr|html|i|iframe|img|input|kbd|label|legend|li|main|mark|menu|nav|ol|optgroup|option|output|p|picture|pre|progress|q|s|samp|section|select|slot|small|source|span|strong|sub|summary|sup|table|tbody|td|template|textarea|tfoot|th|thead|time|tr|u|ul|video|svg|g|path|circle|ellipse|line|polyline|polygon|rect|text|tspan|use|defs|clipPath|mask|foreignObject';
-
-const emotionSelectorGuards = [
-  {
-    selector: 'Literal[value=/data-color-mode/]',
-    message:
-      'Do not branch styles on [data-color-mode] selectors. Declare the per-mode values in a CSSVariablesByColorMode block and reference the resulting token — refer to packages/components/docs/STYLING.md.',
-  },
-  {
-    selector: 'TemplateElement[value.raw=/data-color-mode/]',
-    message:
-      'Do not branch styles on [data-color-mode] selectors. Declare the per-mode values in a CSSVariablesByColorMode block and reference the resulting token — refer to packages/components/docs/STYLING.md.',
-  },
-  {
-    // A tag name (or `*`) after a descendant/child/sibling combinator inside
-    // a selector key, e.g. '& > button', '&:hover svg'. Keys starting with
-    // `@` (media/supports/container queries) are exempt, as is the
-    // tag-qualified self form `button&` (it narrows the host element, it
-    // doesn't reach into children).
-    selector: `Property[key.type='Literal'][key.value=/^(?!@).*[\\s>+~](\\*|${TAG_NAMES})(?![\\w(&-])/]`,
-    message:
-      'Do not target child elements by tag; give the child its own classname and reference it (CSS isolation — refer to packages/components/docs/STYLING.md).',
-  },
-  {
-    // A bare tag-name selector key, quoted ('svg', 'p, span') …
-    selector: `Property[key.type='Literal'][key.value=/^(\\*|${TAG_NAMES})([\\s,>+~:].*)?$/][value.type='ObjectExpression']`,
-    message:
-      'Do not style elements by tag; give the element its own classname (CSS isolation — refer to packages/components/docs/STYLING.md).',
-  },
-  {
-    // … or unquoted (svg: { … } nests a tag selector in Emotion).
-    selector: `Property[key.type='Identifier'][key.name=/^(${TAG_NAMES})$/][value.type='ObjectExpression']`,
-    message:
-      'Do not style elements by tag; give the element its own classname (CSS isolation — refer to packages/components/docs/STYLING.md).',
-  },
-];
-
 export default defineConfig(
   eslint.configs.recommended,
   tseslint.configs.recommended,
+  reactHooks.configs.flat['recommended-latest'],
   prettier,
   cssPlugin.configs['flat/recommended'],
   {

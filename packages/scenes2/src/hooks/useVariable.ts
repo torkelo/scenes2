@@ -2,7 +2,9 @@ import React from 'react';
 
 import { VariableContext, type VariableContextState } from '../variables/types';
 
-export function useVariable(name: string): VariableContextState {
+export function useVariable<T = unknown>(
+  name: string,
+): VariableContextState<T> {
   let ctx = React.useContext(VariableContext);
 
   if (!ctx) {
@@ -11,7 +13,7 @@ export function useVariable(name: string): VariableContextState {
 
   while (ctx) {
     if (ctx.name === name) {
-      return ctx;
+      return ctx as VariableContextState<T>;
     }
 
     ctx = ctx?.parent;

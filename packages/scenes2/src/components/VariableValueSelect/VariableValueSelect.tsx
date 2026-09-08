@@ -2,22 +2,25 @@ import { isArray } from 'lodash';
 import { Combobox, type ComboboxOption, Field } from '@grafana/ui';
 
 import { useVariable } from '../../hooks/useVariable';
-import type { VariableContextState } from '../../variables/types';
+import type {
+  VariableContextState,
+  VariableValue,
+} from '../../variables/types';
 
 interface VariableValueSelectProps {
   name: string;
-  options: string[];
 }
 
-export function VariableValueSelect({
-  name,
-  options,
-}: VariableValueSelectProps) {
-  const variable = useVariable(name);
+export function VariableValueSelect({ name }: VariableValueSelectProps) {
+  const variable = useVariable<VariableValue>(name);
+  const options =
+    variable.options?.map((x) => ({
+      value: String(x.value),
+      label: x.label ?? String(x.value),
+    })) ?? [];
 
-  const comboboxOptions = options.map((x) => ({ value: x, label: x }));
   const onChange = (newValue: ComboboxOption<string>) => {
-    variable.changeValueTo({
+    variable.onChange({
       value: newValue.value,
       label: newValue.label ?? newValue.value,
     });
@@ -27,12 +30,17 @@ export function VariableValueSelect({
 
   return (
     <Field label={name} noMargin>
-      <Combobox value={value} options={comboboxOptions} onChange={onChange} />
+      <Combobox
+        loading={variable.loading}
+        value={value}
+        options={options}
+        onChange={onChange}
+      />
     </Field>
   );
 }
 
-function getComboboxValue(variable: VariableContextState) {
+function getComboboxValue(variable: VariableContextState<VariableValue>) {
   if (isArray(variable.value)) {
     throw new Error(
       'VariableValueSelect does not support multi-value variables',
@@ -43,5 +51,5 @@ function getComboboxValue(variable: VariableContextState) {
     return variable.value.value;
   }
 
-  return JSON.stringify(variable.value);
+  return null;
 }

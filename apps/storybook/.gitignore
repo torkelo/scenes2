@@ -1,6 +1,0 @@
-# Playwright VRT run outputs. The canonical baselines live in
-# vrt/__screenshots__/ and ARE committed; everything below is regenerated on
-# each run (candidate/diff images, the HTML report) and must not be.
-test-results/
-playwright-report/
-vrt/report/

@@ -5,7 +5,6 @@ export {
   useCache,
 } from './caching/CacheContext';
 export { type CacheEntry, MemoryCache } from './caching/MemoryCache';
-export { TestComp } from './components/TestComp';
 export { VariableValueSelect } from './components/VariableValueSelect/VariableValueSelect';
 export { type VizConfig } from './components/VizPanel/PanelBuilders/types';
 export { VizConfigBuilder } from './components/VizPanel/PanelBuilders/VizConfigBuilder';
@@ -28,5 +27,6 @@ export {
   useUrlSync,
 } from './url/UrlStateContext';
 export { UrlStateRegistry } from './url/UrlStateRegistry';
+export { DefineVariable } from './variables/DefineVariable';
 export { useInterpolator } from './variables/interpolation/useInterpolator';
-export { TestVariable } from './variables/TestVariable';
+export { VariableTestQuery } from './variables/VariableTestQuery';

@@ -1,29 +1,31 @@
 import { createContext } from 'react';
 import type { VariableType } from '@grafana/data';
 
-export type VariableValueSingle = {
-  label: string;
-  value: string | number | boolean | object | null | undefined;
+export type VariableValue = {
+  label?: string;
+  value?: string | number | boolean;
+  properties?: Record<string, unknown>;
 };
 
-export type VariableValue = VariableValueSingle | VariableValueSingle[];
 export interface VariableValueOption {
   label: string;
-  value: VariableValueSingle;
-  properties: Record<string, unknown>;
+  value: string | number | boolean;
+  properties?: Record<string, unknown>;
   group?: string;
 }
 
-export interface VariableContextState<T> {
+export interface VariableContextState<T = unknown> {
   name: string;
   value: T;
+  options?: VariableValueOption[];
   loading?: boolean;
   error?: Error | null;
+  parent?: VariableContextState<unknown> | undefined;
   getValue(fieldPath?: string): unknown;
-  changeValueTo(value: T): void;
-  setLoading?(loading: boolean): void;
-  setError?(error: Error | null): void;
-  parent?: VariableContextState<unknown>;
+  onOptionsChange(options: VariableValueOption[]): void;
+  onChange(value: T): void;
+  onSetLoading(loading: boolean): void;
+  onSetError(error: Error | null): void;
 }
 
 export const VariableContext = createContext<

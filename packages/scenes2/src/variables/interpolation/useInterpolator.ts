@@ -12,18 +12,16 @@ export function useInterpolator(
   input: string,
   _scopedVars?: ScopedVars,
   _format?: InterpolationFormatParameter,
-): string {
+): [string, boolean] {
   const context = React.useContext(VariableContext);
 
   if (!context) {
-    return input;
+    return [input, false];
   }
 
-  const interpolated = React.useMemo(() => {
+  return React.useMemo(() => {
     return interpolate(input, context);
   }, [input, context]);
-
-  return interpolated;
 }
 
 function interpolate(
@@ -31,10 +29,12 @@ function interpolate(
   context: VariableContextState<unknown>,
   scopedVars?: ScopedVars,
   _format?: InterpolationFormatParameter,
-): string {
+): [string, boolean] {
   VARIABLE_REGEX.lastIndex = 0;
 
-  return target.replace(
+  let loading = false;
+
+  const result = target.replace(
     VARIABLE_REGEX,
     (match, var1, var2, _fmt2, var3, fieldPath, _fmt3) => {
       const variableName = var1 || var2 || var3;
@@ -45,9 +45,15 @@ function interpolate(
         return match;
       }
 
+      if (variable.loading) {
+        loading = true;
+      }
+
       return String(variable.getValue(fieldPath) || '');
     },
   );
+
+  return [result, loading];
 }
 
 function lookupVariable(

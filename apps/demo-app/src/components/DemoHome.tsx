@@ -1,6 +1,6 @@
 import { PluginPage } from '@grafana/runtime';
 import {
-  TestVariable,
+  DefineVariable,
   useInterpolator,
   useDataQuery,
   VizConfigBuilders,
@@ -9,6 +9,7 @@ import {
   TimeRangeContextPicker,
   TimeRangeContextProvider,
   UrlStateProvider,
+  VariableTestQuery,
 } from '@grafana/scenes2';
 import { VisibilityMode } from '@grafana/schema';
 import { GraphGradientMode, LineInterpolation, Stack } from '@grafana/ui';
@@ -23,11 +24,10 @@ export function DemoHome() {
       <QueryClientProvider client={queryClient}>
         <UrlStateProvider>
           <TimeRangeContextProvider cacheKey="DemoHome" staleTime={30000}>
-            <TestVariable name="service" value="" query="A.*" delay={10}>
-              <TestVariable name="pod" value="" query="A.$service.*" delay={20}>
-                <PrintVariable />
-              </TestVariable>
-            </TestVariable>
+            <DefineVariable name="service" loading={true}>
+              <VariableTestQuery name="service" query="A.*" delay={2000} />
+              <PrintVariable />
+            </DefineVariable>
           </TimeRangeContextProvider>
         </UrlStateProvider>
       </QueryClientProvider>
@@ -43,8 +43,9 @@ const plainViz = VizConfigBuilders.timeseries()
   .build();
 
 const PrintVariable = React.memo(function PrintVariable() {
-  const alias = useInterpolator('service=${service} pod=${pod}');
+  const [alias, loading] = useInterpolator('service=${service} pod=${pod}');
   const data = useDataQuery({
+    enabled: !loading,
     queries: [
       {
         refId: 'A',
@@ -62,7 +63,7 @@ const PrintVariable = React.memo(function PrintVariable() {
     <div>
       <Stack direction="column" gap={3}>
         <Stack justifyContent={'space-between'}>
-          <VariableValueSelect name="pod" options={['test', 'prod', 'dev']} />
+          <VariableValueSelect name="service" />
           <TimeRangeContextPicker />
         </Stack>
         <VizPanel title="Test graph" vizConfig={plainViz} data={data.data} />

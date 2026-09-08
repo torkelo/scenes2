@@ -47,14 +47,15 @@ function useVariableContextState<T>(
     value: value,
     loading,
     error,
-    getValue: (_?: string) => {
+    getValue: (_fieldPath?: string) => {
       return value;
     },
-    changeValueTo: (newValue: T) => {
+    onChange: (newValue: T) => {
       setValue(newValue);
     },
-    setLoading,
-    setError,
+    onSetLoading: setLoading,
+    onSetError: setError,
+    onOptionsChange: () => {},
     parent: input.parent,
   };
 }
