@@ -22,18 +22,6 @@ import { UrlStateRegistry } from './UrlStateRegistry';
  */
 export type UrlValues<T> = { readonly [K in keyof T]?: string | undefined };
 
-/** Writes the url keys claimed by {@link useUrlSync}. */
-export interface UrlSync<T> {
-  /** The url key each claimed key resolved to, e.g. `{ from: 'from2' }`. */
-  readonly keys: Readonly<Record<keyof T & string, string>>;
-  /**
-   * Writes `values` to the query string, adding a history entry so that the
-   * back button returns to the state before it. Writing what the query string
-   * already holds does nothing.
-   */
-  set(values: UrlValues<T>): void;
-}
-
 /** The query string of one subtree, and the way to change it. */
 export interface UrlState {
   /** Hands out the url keys, so that two consumers never share one. */
@@ -157,8 +145,8 @@ export function UrlStateProvider({
  */
 export function useUrlSync<T extends object>(
   keys: readonly (keyof T & string)[],
-  onChange: (values: UrlValues<T>) => void,
-): UrlSync<T> {
+  fromUrl: (values: UrlValues<T>) => T,
+): [T, (update: T) => void] {
   const local = useLocalUrlState();
   const { registry, params, write } = useContext(UrlStateContext) ?? local;
   const owner = useId();
@@ -188,29 +176,6 @@ export function useUrlSync<T extends object>(
     [params, claimed],
   );
 
-  // Held in a ref so that an inline callback does not count as a change.
-  const latest = useRef(onChange);
-  latest.current = onChange;
-
-  // What onChange was last handed. React re-renders on a setState made here
-  // before it commits, so the state the callback feeds is right by the time
-  // anything can see it — an effect would leave one render showing the values
-  // the component would have had if the URL were empty. Compared key by key
-  // rather than by identity, since React is free to throw the memo above away.
-  const applied = useRef<UrlValues<T> | undefined>(undefined);
-
-  if (!applied.current || !sameValues(applied.current, values)) {
-    applied.current = values;
-    latest.current(values);
-  }
-
-  // Also a ref, so that `set` stays the same function for as long as the
-  // component is mounted: the write comes off a context value that is replaced
-  // on every location change, and a `set` that changed with it would churn
-  // every callback a consumer builds on top of it.
-  const writeLatest = useRef(write);
-  writeLatest.current = write;
-
   const set = useCallback(
     (update: UrlValues<T>) => {
       const named: Record<string, string | undefined> = update;
@@ -220,12 +185,12 @@ export function useUrlSync<T extends object>(
         mapped[urlKeyOf(claimed, key)] = value;
       }
 
-      writeLatest.current(mapped);
+      write(mapped);
     },
-    [claimed],
+    [claimed, write],
   );
 
-  return useMemo(() => ({ keys: claimed, set }), [claimed, set]);
+  return [fromUrl(values), set];
 }
 
 /**

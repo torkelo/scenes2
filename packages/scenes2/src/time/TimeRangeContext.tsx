@@ -121,17 +121,14 @@ function useTimeRangeState({
   // state already holds fills in the rest. The same rule covers a later change
   // to the URL, whether it came from the back button or from somewhere else in
   // the app.
-  const url = useUrlSync<TimeRangeUrlState>(urlKeys, (values) =>
-    setState((current) => {
-      const from = validRaw(values.from) ?? current.from;
-      const to = validRaw(values.to) ?? current.to;
-
-      if (from === current.from && to === current.to) {
-        return current;
-      }
+  const [urlState, updateUrlState] = useUrlSync<TimeRangeUrlState>(
+    urlKeys,
+    (values) => {
+      const from = validRaw(values.from) ?? state.from;
+      const to = validRaw(values.to) ?? state.to;
 
       return evaluate(from, to, validTimeZone);
-    }),
+    },
   );
 
   useEffect(() => {
