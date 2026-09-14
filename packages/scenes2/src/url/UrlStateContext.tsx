@@ -145,8 +145,7 @@ export function UrlStateProvider({
  */
 export function useUrlSync<T extends object>(
   keys: readonly (keyof T & string)[],
-  fromUrl: (values: UrlValues<T>) => T,
-): [T, (update: T) => void] {
+): [UrlValues<T>, (update: T) => void] {
   const local = useLocalUrlState();
   const { registry, params, write } = useContext(UrlStateContext) ?? local;
   const owner = useId();
@@ -171,7 +170,7 @@ export function useUrlSync<T extends object>(
     return () => registry.release(owner);
   }, [registry, owner, claimedKeys, claimed]);
 
-  const values = useMemo(
+  const state = useMemo(
     () => readValues<T>(params, claimed),
     [params, claimed],
   );
@@ -190,7 +189,7 @@ export function useUrlSync<T extends object>(
     [claimed, write],
   );
 
-  return [fromUrl(values), set];
+  return [state, set];
 }
 
 /**

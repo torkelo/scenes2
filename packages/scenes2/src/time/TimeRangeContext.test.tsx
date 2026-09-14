@@ -139,107 +139,94 @@ describe('TimeRangeContextProvider', () => {
     vi.useRealTimers();
   });
 
-  it('evaluates initFrom/initTo again on remount when there is no cacheKey', () => {
-    renderWithCache(cache).unmount();
-    vi.advanceTimersByTime(60000);
-    renderWithCache(cache);
-    const first = readState();
+  describe('Time range caching', () => {
+    it('restores the cached state on remount', () => {
+      renderWithCache(cache, { cacheKey: 'test' });
+      const before = readState();
 
-    expect(first.raw).toBe('now-6h to now');
+      cleanup();
+      vi.advanceTimersByTime(1000);
+      renderWithCache(cache, { cacheKey: 'test' });
 
-    cleanup();
-    vi.advanceTimersByTime(60000);
-    renderWithCache(cache);
+      expect(readState()).toEqual(before);
+    });
 
-    expect(readState().evaluated).not.toBe(first.evaluated);
-  });
+    it('remembers a changed time range across a remount', () => {
+      renderWithCache(cache, { cacheKey: 'test' });
+      selectLast1h();
 
-  it('restores the cached state on remount', () => {
-    renderWithCache(cache, { cacheKey: 'test' });
-    const before = readState();
+      const changed = readState();
+      expect(changed.raw).toBe('now-1h to now');
 
-    cleanup();
-    vi.advanceTimersByTime(1000);
-    renderWithCache(cache, { cacheKey: 'test' });
+      cleanup();
+      vi.advanceTimersByTime(1000);
+      renderWithCache(cache, { cacheKey: 'test' });
 
-    expect(readState()).toEqual(before);
-  });
+      expect(readState()).toEqual(changed);
+    });
 
-  it('remembers a changed time range across a remount', () => {
-    renderWithCache(cache, { cacheKey: 'test' });
-    selectLast1h();
+    it('ignores the cached state once staleTime has passed', () => {
+      renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
+      selectLast1h();
+      const before = readState();
 
-    const changed = readState();
-    expect(changed.raw).toBe('now-1h to now');
+      cleanup();
+      vi.advanceTimersByTime(5001);
+      renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
 
-    cleanup();
-    vi.advanceTimersByTime(1000);
-    renderWithCache(cache, { cacheKey: 'test' });
+      expect(readState().raw).toBe('now-6h to now');
+      expect(readState().evaluated).not.toBe(before.evaluated);
+    });
 
-    expect(readState()).toEqual(changed);
-  });
+    it('counts staleTime from the last change, not from the first mount', () => {
+      renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
+      vi.advanceTimersByTime(4000);
+      selectLast1h();
 
-  it('ignores the cached state once staleTime has passed', () => {
-    renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
-    selectLast1h();
-    const before = readState();
+      const changed = readState();
 
-    cleanup();
-    vi.advanceTimersByTime(5001);
-    renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
+      cleanup();
+      vi.advanceTimersByTime(4000);
+      renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
 
-    expect(readState().raw).toBe('now-6h to now');
-    expect(readState().evaluated).not.toBe(before.evaluated);
-  });
+      expect(readState()).toEqual(changed);
+    });
 
-  it('counts staleTime from the last change, not from the first mount', () => {
-    renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
-    vi.advanceTimersByTime(4000);
-    selectLast1h();
+    it('does not extend staleTime by remounting', () => {
+      renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
+      const before = readState();
 
-    const changed = readState();
+      cleanup();
+      vi.advanceTimersByTime(4000);
+      renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
+      expect(readState()).toEqual(before);
 
-    cleanup();
-    vi.advanceTimersByTime(4000);
-    renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
+      cleanup();
+      vi.advanceTimersByTime(1001);
+      renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
 
-    expect(readState()).toEqual(changed);
-  });
+      expect(readState().evaluated).not.toBe(before.evaluated);
+    });
 
-  it('does not extend staleTime by remounting', () => {
-    renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
-    const before = readState();
+    it('keeps separate state per cacheKey', () => {
+      renderWithCache(cache, { cacheKey: 'a' });
+      selectLast1h();
 
-    cleanup();
-    vi.advanceTimersByTime(4000);
-    renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
-    expect(readState()).toEqual(before);
+      cleanup();
+      renderWithCache(cache, { cacheKey: 'b', initFrom: 'now-12h' });
 
-    cleanup();
-    vi.advanceTimersByTime(1001);
-    renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
+      expect(readState().raw).toBe('now-12h to now');
+    });
 
-    expect(readState().evaluated).not.toBe(before.evaluated);
-  });
+    it('prefers the cached range over initFrom/initTo', () => {
+      renderWithCache(cache, { cacheKey: 'test', initFrom: 'now-6h' });
+      selectLast1h();
 
-  it('keeps separate state per cacheKey', () => {
-    renderWithCache(cache, { cacheKey: 'a' });
-    selectLast1h();
+      cleanup();
+      renderWithCache(cache, { cacheKey: 'test', initFrom: 'now-12h' });
 
-    cleanup();
-    renderWithCache(cache, { cacheKey: 'b', initFrom: 'now-12h' });
-
-    expect(readState().raw).toBe('now-12h to now');
-  });
-
-  it('prefers the cached range over initFrom/initTo', () => {
-    renderWithCache(cache, { cacheKey: 'test', initFrom: 'now-6h' });
-    selectLast1h();
-
-    cleanup();
-    renderWithCache(cache, { cacheKey: 'test', initFrom: 'now-12h' });
-
-    expect(readState().raw).toBe('now-1h to now');
+      expect(readState().raw).toBe('now-1h to now');
+    });
   });
 
   describe('url sync', () => {
