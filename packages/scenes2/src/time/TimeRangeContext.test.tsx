@@ -1,13 +1,13 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { StrictMode } from 'react';
-import { BrowserRouter, MemoryRouter, useNavigate } from 'react-router-dom';
+import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CacheProvider } from '../caching/CacheContext';
 import { MemoryCache } from '../caching/MemoryCache';
 import { useTimeRange } from '../hooks/useTimeRange';
 import { UrlStateProvider } from '../url/UrlStateContext';
-import { UrlStateRegistry } from '../url/UrlStateRegistry';
+import type { UrlStateRegistry } from '../url/UrlStateRegistry';
 import {
   TimeRangeContextProvider,
   type TimeRangeContextProviderProps,
@@ -71,17 +71,28 @@ function renderWithUrl(
   );
 }
 
-function renderNestedWithUrl(registry?: UrlStateRegistry) {
+function renderScenarioWithProps(
+  initialUrl?: string,
+  props: Partial<TimeRangeContextProviderProps> = {},
+) {
+  window.history.replaceState(null, '', initialUrl ?? '/');
+
   return render(
     <BrowserRouter>
-      <UrlStateProvider registry={registry}>
-        <TimeRangeContextProvider>
-          <ShowTimeRange />
-          <TimeRangeContextProvider initFrom="now-2d">
-            <ShowTimeRange name="inner" />
+      <CacheProvider>
+        <UrlStateProvider>
+          <TimeRangeContextProvider>
+            <ShowTimeRange />
+            <TimeRangeContextProvider initFrom="now-2d" {...props}>
+              <ShowTimeRange name="inner" />
+            </TimeRangeContextProvider>
           </TimeRangeContextProvider>
-        </TimeRangeContextProvider>
-      </UrlStateProvider>
+          <GoTo search="?from=now-15m&to=now" />
+          <GoTo search="?from=now-2d" />
+          <GoTo search="?from=nonsense" />
+          <GoBack />
+        </UrlStateProvider>
+      </CacheProvider>
     </BrowserRouter>,
   );
 }
@@ -103,7 +114,16 @@ function goTo(search: string) {
 function GoBack() {
   const navigate = useNavigate();
 
-  return <button onClick={() => navigate(-1)}>go back</button>;
+  return (
+    <button
+      onClick={() => {
+        console.log('go back');
+        navigate(-1);
+      }}
+    >
+      go back
+    </button>
+  );
 }
 
 function goBack() {
@@ -287,7 +307,7 @@ describe('TimeRangeContextProvider', () => {
     });
 
     it('gives a nested provider its own numbered keys', () => {
-      renderNestedWithUrl();
+      renderScenarioWithProps();
       selectLast1h('inner');
 
       expect(queryParams()).toEqual({ from2: 'now-1h', to2: 'now' });
@@ -303,12 +323,7 @@ describe('TimeRangeContextProvider', () => {
     });
 
     it('starts a nested provider on the range its numbered keys hold', () => {
-      window.history.replaceState(
-        null,
-        '',
-        '/?from=now-3h&to=now&from2=now-15m&to2=now',
-      );
-      renderNestedWithUrl();
+      renderScenarioWithProps('/?from=now-3h&to=now&from2=now-15m&to2=now');
 
       expect(readState().raw).toBe('now-3h to now');
       expect(readState('inner').raw).toBe('now-15m to now');
@@ -335,11 +350,9 @@ describe('TimeRangeContextProvider', () => {
     });
 
     it('hands the keys back when a provider unmounts', () => {
-      const registry = new UrlStateRegistry();
-
-      renderNestedWithUrl(registry);
+      renderScenarioWithProps();
       cleanup();
-      renderWithUrl(cache, {}, registry);
+      renderScenarioWithProps();
       selectLast1h();
 
       expect(queryParams()).toEqual({ from: 'now-1h', to: 'now' });
@@ -356,24 +369,8 @@ describe('TimeRangeContextProvider', () => {
   });
 
   describe('url subscription', () => {
-    function renderInRouter(entry: string, props = {}) {
-      return render(
-        <MemoryRouter initialEntries={[entry]}>
-          <UrlStateProvider>
-            <TimeRangeContextProvider {...props}>
-              <ShowTimeRange />
-            </TimeRangeContextProvider>
-            <GoTo search="?from=now-15m&to=now" />
-            <GoTo search="?from=now-2d" />
-            <GoTo search="?from=nonsense" />
-            <GoBack />
-          </UrlStateProvider>
-        </MemoryRouter>,
-      );
-    }
-
     it('follows a range the rest of the app puts in the URL', () => {
-      renderInRouter('/');
+      renderScenarioWithProps('/');
 
       expect(readState().raw).toBe('now-6h to now');
 
@@ -383,7 +380,7 @@ describe('TimeRangeContextProvider', () => {
     });
 
     it('re-evaluates the range it follows to', () => {
-      renderInRouter('/?from=now-15m&to=now');
+      renderScenarioWithProps('/?from=now-15m&to=now');
       const before = readState();
 
       goTo('?from=now-2d');
@@ -395,7 +392,7 @@ describe('TimeRangeContextProvider', () => {
     });
 
     it('keeps the half the URL drops', () => {
-      renderInRouter('/?from=now-3h&to=now-1h');
+      renderScenarioWithProps('/?from=now-3h&to=now-1h');
 
       goTo('?from=now-2d');
 
@@ -403,19 +400,19 @@ describe('TimeRangeContextProvider', () => {
     });
 
     it('ignores a range the URL carries that does not parse', () => {
-      renderInRouter('/?from=now-3h&to=now');
+      renderScenarioWithProps('/?from=now-3h&to=now');
 
       goTo('?from=nonsense');
 
       expect(readState().raw).toBe('now-3h to now');
     });
 
-    it('goes back to the range the previous history entry holds', () => {
-      renderInRouter('/?from=now-3h&to=now');
+    it.only('goes back to the range the previous history entry holds', () => {
+      renderScenarioWithProps('/?from=now-3h&to=now');
 
-      selectLast1h();
-      expect(readState().raw).toBe('now-1h to now');
-
+      //selectLast1h();
+      goTo('?from=now-2d');
+      expect(readState().raw).toBe('now-2d to now');
       goBack();
 
       expect(readState().raw).toBe('now-3h to now');

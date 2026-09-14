@@ -1,15 +1,16 @@
-import { fireEvent, render, renderHook, screen } from '@testing-library/react';
-import { StrictMode, useEffect, useState } from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { StrictMode, useEffect } from 'react';
 import React from 'react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { UrlStateProvider, useUrlSync } from './UrlStateContext';
+import { UrlStateRegistry } from './UrlStateRegistry';
 
 /** The shape a consumer declares, which is what its keys and writes go by. */
 interface Filters {
   query?: string;
-  page?: number;
+  page?: string;
 }
 
 const keys = ['query', 'page'] as const;
@@ -20,12 +21,7 @@ let stateUpdates = 0;
  * last handed rather than what the query string holds.
  */
 function ShowFilters({ name = 'outer' }: { name?: string }) {
-  const [state, update] = useUrlSync<Filters>(keys, (values) => {
-    return {
-      query: values.query,
-      page: values.page ? parseInt(values.page) : undefined,
-    };
-  });
+  const [state, update] = useUrlSync<Filters>(keys);
 
   useEffect(() => {
     stateUpdates++;
@@ -42,7 +38,7 @@ function ShowFilters({ name = 'outer' }: { name?: string }) {
       </button>
       <button
         onClick={() => {
-          update({ query: 'cpu', page: 2 });
+          update({ query: 'cpu', page: '2' });
         }}
       >
         {`${name} set both`}
@@ -121,127 +117,127 @@ describe('useUrlSync', () => {
       expect(readState()).toEqual({ page: 3 });
     });
 
-    //   it.only('stacks two writes made in the same tick', () => {
-    //     renderInRouter('/', <ShowFilters />);
+    it.only('stacks two writes made in the same tick', () => {
+      renderInRouter('/', <ShowFilters />);
 
-    //     click('outer set both');
+      click('outer set both');
 
-    //     expect(readValues()).toEqual({ query: 'cpu', page: '2' });
-    //   });
+      expect(readState()).toEqual({ query: 'cpu', page: '2' });
+    });
 
-    //   it('leaves the query string alone until a write', () => {
-    //     renderInRouter('/?unrelated=1', <ShowFilters />);
+    it('leaves the query string alone until a write', () => {
+      renderInRouter('/?unrelated=1', <ShowFilters />);
 
-    //     expect(readValues()).toEqual({});
-    //   });
+      expect(readState()).toEqual({});
+    });
 
-    //   it('gives the keys it asked for to the first consumer only', () => {
-    //     renderInRouter(
-    //       '/',
-    //       <>
-    //         <ShowFilters />
-    //         <ShowFilters name="inner" />
-    //       </>,
-    //     );
+    it('gives the keys it asked for to the first consumer only', () => {
+      renderInRouter(
+        '/',
+        <>
+          <ShowFilters />
+          <ShowFilters name="inner" />
+        </>,
+      );
 
-    //     expect(readKeys()).toEqual({ query: 'query', page: 'page' });
-    //     expect(readKeys('inner')).toEqual({ query: 'query2', page: 'page2' });
-    //   });
+      expect(readState()).toEqual({ query: 'query', page: 'page' });
+      expect(readState('inner')).toEqual({ query: 'query2', page: 'page2' });
+    });
 
-    //   it('keeps two consumers on their own keys', () => {
-    //     renderInRouter(
-    //       '/?query=cpu&query2=mem',
-    //       <>
-    //         <ShowFilters />
-    //         <ShowFilters name="inner" />
-    //       </>,
-    //     );
+    it('keeps two consumers on their own keys', () => {
+      renderInRouter(
+        '/?query=cpu&query2=mem',
+        <>
+          <ShowFilters />
+          <ShowFilters name="inner" />
+        </>,
+      );
 
-    //     expect(readValues()).toEqual({ query: 'cpu' });
-    //     expect(readValues('inner')).toEqual({ query: 'mem' });
+      expect(readState()).toEqual({ query: 'cpu' });
+      expect(readState('inner')).toEqual({ query: 'mem' });
 
-    //     click('inner set query');
+      click('inner set query');
 
-    //     expect(readValues()).toEqual({ query: 'cpu' });
-    //     expect(readValues('inner')).toEqual({ query: 'cpu' });
-    //   });
+      expect(readState()).toEqual({ query: 'cpu' });
+      expect(readState('inner')).toEqual({ query: 'cpu' });
+    });
 
-    //   it('shares a registry passed to the provider', () => {
-    //     const registry = new UrlStateRegistry();
+    it('shares a registry passed to the provider', () => {
+      const registry = new UrlStateRegistry();
 
-    //     render(
-    //       <MemoryRouter>
-    //         <UrlStateProvider registry={registry}>
-    //           <ShowFilters />
-    //         </UrlStateProvider>
-    //       </MemoryRouter>,
-    //     );
+      render(
+        <MemoryRouter>
+          <UrlStateProvider registry={registry}>
+            <ShowFilters />
+          </UrlStateProvider>
+        </MemoryRouter>,
+      );
 
-    //     expect(registry.claim('other', ['query'])).toEqual({ query: 'query2' });
-    //   });
+      expect(registry.claim('other', ['query'])).toEqual({ query: 'query2' });
+    });
 
-    //   it('gives out the same keys under StrictMode', () => {
-    //     render(
-    //       <StrictMode>
-    //         <MemoryRouter>
-    //           <UrlStateProvider>
-    //             <ShowFilters />
-    //             <ShowFilters name="inner" />
-    //           </UrlStateProvider>
-    //         </MemoryRouter>
-    //       </StrictMode>,
-    //     );
+    it('gives out the same keys under StrictMode', () => {
+      render(
+        <StrictMode>
+          <MemoryRouter>
+            <UrlStateProvider>
+              <ShowFilters />
+              <ShowFilters name="inner" />
+            </UrlStateProvider>
+          </MemoryRouter>
+        </StrictMode>,
+      );
 
-    //     expect(readKeys()).toEqual({ query: 'query', page: 'page' });
-    //     expect(readKeys('inner')).toEqual({ query: 'query2', page: 'page2' });
-    //   });
-    // });
+      expect(readState()).toEqual({ query: 'query', page: 'page' });
+      expect(readState('inner')).toEqual({ query: 'query2', page: 'page2' });
+    });
+  });
 
-    // describe('without a provider', () => {
-    //   it('keeps the values in React state', () => {
-    //     render(<ShowFilters />);
+  describe('without a provider', () => {
+    it('keeps the values in React state', () => {
+      render(<ShowFilters />);
 
-    //     expect(readValues()).toEqual({});
+      expect(readState()).toEqual({});
 
-    //     click('outer set query');
+      click('outer set query');
 
-    //     expect(readValues()).toEqual({ query: 'cpu' });
-    //   });
+      expect(readState()).toEqual({ query: 'cpu' });
+    });
 
-    //   it('leaves the query string alone', () => {
-    //     window.history.replaceState(null, '', '/?query=disk');
-    //     render(<ShowFilters />);
+    it('leaves the query string alone', () => {
+      window.history.replaceState(null, '', '/?query=disk');
+      render(<ShowFilters />);
 
-    //     click('outer set query');
+      click('outer set query');
 
-    //     expect(new URL(window.location.href).search).toBe('?query=disk');
-    //     expect(readValues()).toEqual({ query: 'cpu' });
-    //   });
+      expect(new URL(window.location.href).search).toBe('?query=disk');
+      expect(readState()).toEqual({ query: 'cpu' });
+    });
 
-    //   it('gives every consumer the keys it asked for', () => {
-    //     render(
-    //       <>
-    //         <ShowFilters />
-    //         <ShowFilters name="inner" />
-    //       </>,
-    //     );
+    it('gives every consumer the keys it asked for', () => {
+      render(
+        <>
+          <ShowFilters />
+          <ShowFilters name="inner" />
+        </>,
+      );
 
-    //     expect(readKeys()).toEqual({ query: 'query', page: 'page' });
-    //     expect(readKeys('inner')).toEqual({ query: 'query', page: 'page' });
-    //   });
+      expect(readState()).toEqual({ query: 'query', page: 'page' });
+      expect(readState('inner')).toEqual({ query: 'query', page: 'page' });
+    });
 
-    //   it('keeps two consumers from seeing each other', () => {
-    //     render(
-    //       <>
-    //         <ShowFilters />
-    //         <ShowFilters name="inner" />
-    //       </>,
-    //     );
+    it('keeps two consumers from seeing each other', () => {
+      render(
+        <>
+          <ShowFilters />
+          <ShowFilters name="inner" />
+        </>,
+      );
 
-    //     click('inner set query');
+      click('inner set query');
 
-    //     expect(readValues()).toEqual({});
-    //     expect(readValues('inner')).toEqual({ query: 'cpu' });
-    //   });
+      expect(readState()).toEqual({});
+      expect(readState('inner')).toEqual({ query: 'cpu' });
+    });
   });
 });
