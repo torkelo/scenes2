@@ -65,7 +65,6 @@ export function UrlStateProvider({
   const [ownRegistry] = useState(() => new UrlStateRegistry());
   const location = useLocation();
   const navigate = useNavigate();
-  console.log('location', location.search);
 
   const params = useMemo(
     () => new URLSearchParams(location.search),
@@ -93,7 +92,6 @@ export function UrlStateProvider({
         }
 
         pending.current = next;
-        console.log('navigate', next);
         navigate({ search: next.toString(), hash: location.hash });
       },
     }),

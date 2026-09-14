@@ -69,8 +69,7 @@ pnpm build              # first run — generates catalog artifacts other tasks 
 ### Development
 
 ```bash
-pnpm dev                                 # Start all dev servers
-pnpm storybook                           # Start Storybook (port 6006)
+pnpm dev                                                  # Start all dev servers
 ```
 
 Storybook automatically discovers `*.stories.{ts,tsx,mdx}` files from every

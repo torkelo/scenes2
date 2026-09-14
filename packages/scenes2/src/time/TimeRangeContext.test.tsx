@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from '@testing-library/react';
 import { StrictMode } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -114,20 +120,18 @@ function goTo(search: string) {
 function GoBack() {
   const navigate = useNavigate();
 
-  return (
-    <button
-      onClick={() => {
-        console.log('go back');
-        navigate(-1);
-      }}
-    >
-      go back
-    </button>
-  );
+  return <button onClick={() => navigate(-1)}>go back</button>;
 }
 
 function goBack() {
   fireEvent.click(screen.getByRole('button', { name: 'go back' }));
+
+  // jsdom traverses its session history on queued timeouts and fires popstate
+  // on another one, so the fake timers these tests run on have to be let
+  // through before the router sees the earlier entry.
+  act(() => {
+    vi.runAllTimers();
+  });
 }
 
 function readState(name = 'outer') {
@@ -407,12 +411,12 @@ describe('TimeRangeContextProvider', () => {
       expect(readState().raw).toBe('now-3h to now');
     });
 
-    it.only('goes back to the range the previous history entry holds', () => {
+    it('goes back to the range the previous history entry holds', () => {
       renderScenarioWithProps('/?from=now-3h&to=now');
 
-      //selectLast1h();
       goTo('?from=now-2d');
       expect(readState().raw).toBe('now-2d to now');
+
       goBack();
 
       expect(readState().raw).toBe('now-3h to now');
