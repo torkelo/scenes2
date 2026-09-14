@@ -22,7 +22,6 @@ export {
   UrlStateContext,
   UrlStateProvider,
   type UrlStateProviderProps,
-  type UrlSync,
   type UrlValues,
   useUrlSync,
 } from './url/UrlStateContext';

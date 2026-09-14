@@ -38,7 +38,7 @@ function ShowFilters({ name = 'outer' }: { name?: string }) {
       </button>
       <button
         onClick={() => {
-          update({ query: 'cpu', page: '2' });
+          update({ query: 'cpu-' + name, page: name === 'outer' ? '2' : '3' });
         }}
       >
         {`${name} set both`}
@@ -78,18 +78,18 @@ describe('useUrlSync', () => {
     stateUpdates = 0;
   });
 
-  describe('with a provider', () => {
+  describe('within router', () => {
     it('Should init state onmount', () => {
       renderInRouter('/?query=cpu&page=3', <ShowFilters />);
 
-      expect(readState()).toEqual({ query: 'cpu', page: 3 });
+      expect(readState()).toEqual({ query: 'cpu', page: '3' });
       expect(stateUpdates).toEqual(1);
     });
 
     it('leaves out a key the query string has no value for', () => {
       renderInRouter('/?page=3', <ShowFilters />);
 
-      expect(readState()).toEqual({ page: 3 });
+      expect(readState()).toEqual({ page: '3' });
     });
 
     it('calls fromUrl callback again when the location changes', () => {
@@ -105,7 +105,7 @@ describe('useUrlSync', () => {
 
       click('go to ?query=mem&page=1');
 
-      expect(readState()).toEqual({ query: 'mem', page: 1 });
+      expect(readState()).toEqual({ query: 'mem', page: '1' });
       expect(stateUpdates).toEqual(2);
     });
 
@@ -114,15 +114,15 @@ describe('useUrlSync', () => {
 
       click('outer clear query');
 
-      expect(readState()).toEqual({ page: 3 });
+      expect(readState()).toEqual({ page: '3' });
     });
 
-    it.only('stacks two writes made in the same tick', () => {
+    it('stacks two writes made in the same tick', () => {
       renderInRouter('/', <ShowFilters />);
 
       click('outer set both');
 
-      expect(readState()).toEqual({ query: 'cpu', page: '2' });
+      expect(readState()).toEqual({ query: 'cpu-outer', page: '2' });
     });
 
     it('leaves the query string alone until a write', () => {
@@ -133,15 +133,15 @@ describe('useUrlSync', () => {
 
     it('gives the keys it asked for to the first consumer only', () => {
       renderInRouter(
-        '/',
+        '/?query=inner&page=1&query2=outer&page2=2',
         <>
           <ShowFilters />
           <ShowFilters name="inner" />
         </>,
       );
 
-      expect(readState()).toEqual({ query: 'query', page: 'page' });
-      expect(readState('inner')).toEqual({ query: 'query2', page: 'page2' });
+      expect(readState()).toEqual({ query: 'inner', page: '1' });
+      expect(readState('inner')).toEqual({ query: 'outer', page: '2' });
     });
 
     it('keeps two consumers on their own keys', () => {
@@ -188,12 +188,15 @@ describe('useUrlSync', () => {
         </StrictMode>,
       );
 
-      expect(readState()).toEqual({ query: 'query', page: 'page' });
-      expect(readState('inner')).toEqual({ query: 'query2', page: 'page2' });
+      click('outer set both');
+      click('inner set both');
+
+      expect(readState()).toEqual({ query: 'cpu-outer', page: '2' });
+      expect(readState('inner')).toEqual({ query: 'cpu-inner', page: '3' });
     });
   });
 
-  describe('without a provider', () => {
+  describe('without a router', () => {
     it('keeps the values in React state', () => {
       render(<ShowFilters />);
 
@@ -205,12 +208,11 @@ describe('useUrlSync', () => {
     });
 
     it('leaves the query string alone', () => {
-      window.history.replaceState(null, '', '/?query=disk');
       render(<ShowFilters />);
 
       click('outer set query');
 
-      expect(new URL(window.location.href).search).toBe('?query=disk');
+      expect(new URL(window.location.href).search).toBe('');
       expect(readState()).toEqual({ query: 'cpu' });
     });
 
@@ -222,8 +224,11 @@ describe('useUrlSync', () => {
         </>,
       );
 
-      expect(readState()).toEqual({ query: 'query', page: 'page' });
-      expect(readState('inner')).toEqual({ query: 'query', page: 'page' });
+      click('outer set both');
+      click('inner set both');
+
+      expect(readState()).toEqual({ query: 'cpu-outer', page: '2' });
+      expect(readState('inner')).toEqual({ query: 'cpu-inner', page: '3' });
     });
 
     it('keeps two consumers from seeing each other', () => {

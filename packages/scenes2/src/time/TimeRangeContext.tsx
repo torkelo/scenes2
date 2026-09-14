@@ -1,10 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
+import { createContext, useCallback, useState } from 'react';
 import React from 'react';
 import { type DateTime, getTimeZone, type TimeRange } from '@grafana/data';
 import type { TimeZone } from '@grafana/schema';
