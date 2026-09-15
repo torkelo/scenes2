@@ -15,7 +15,7 @@ import { PageWrapper } from './PageWrapper';
 
 export function VariablesDemo() {
   return (
-    <PageWrapper>
+    <PageWrapper title="Variables demo">
       <DefineVariable name="service" loading={true}>
         <VariableTestQuery name="service" query="A.*" delay={2000} />
         <PrintVariable />

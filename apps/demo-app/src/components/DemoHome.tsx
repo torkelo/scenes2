@@ -15,7 +15,7 @@ const scenarios: DemoScenario[] = [
 
 export function DemoHome() {
   return (
-    <PageWrapper>
+    <PageWrapper title="Select demo / scenario">
       <Stack direction="column" gap={2}>
         {scenarios.map((scenario) => (
           <TextLink key={scenario.route} href={prefixRoute(scenario.route)}>

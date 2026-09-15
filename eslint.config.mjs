@@ -4,9 +4,9 @@ import prettier from 'eslint-config-prettier';
 import cssPlugin from 'eslint-plugin-css';
 import perfectionist from 'eslint-plugin-perfectionist';
 import pluginPrettier from 'eslint-plugin-prettier';
+import reactHooks from 'eslint-plugin-react-hooks';
 import { defineConfig } from 'eslint/config';
 import tseslint from 'typescript-eslint';
-import reactHooks from 'eslint-plugin-react-hooks';
 
 // `@emotion/eslint-plugin` ships CJS without a default-export marker, so the
 // plugin object arrives via the namespace's `default` under Node ESM interop.

@@ -8,7 +8,7 @@ const panelTitles = ['Panel A', 'Panel B', 'Panel C', 'Panel D'];
 
 export function PanelGridLayoutDemo() {
   return (
-    <PageWrapper>
+    <PageWrapper title="Panel grid layout demo">
       <PanelGridLayout>
         {panelTitles.map((title) => (
           <DemoPanel key={title} title={title} />
