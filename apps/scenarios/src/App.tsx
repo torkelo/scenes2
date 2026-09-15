@@ -4,6 +4,7 @@ import { TimeRangeContextProvider, UrlStateProvider } from '@grafana/scenes2';
 
 import { HomePage } from './pages/HomePage';
 import { PanelGridLayoutDemoPage } from './pages/PanelGridLayoutDemoPage';
+import { SinglePanelDemoPage } from './pages/SinglePanelDemoPage';
 
 const queryClient = new QueryClient();
 
@@ -18,6 +19,10 @@ export function App() {
               <Route
                 path="/panel-grid-layout-demo"
                 element={<PanelGridLayoutDemoPage />}
+              />
+              <Route
+                path="/single-panel-demo"
+                element={<SinglePanelDemoPage />}
               />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
