@@ -64,13 +64,18 @@ equivalent of `apps/demo-app`'s `PanelGridLayoutDemo`, with the same
 `QueryClientProvider` + `UrlStateProvider` + `TimeRangeContextProvider`
 nesting, querying the fake data source and rendering through the fake panel.
 
-### Known gaps
+### Fonts and icons
 
-`GlobalStyles` from `@grafana/ui` declares `@font-face` rules pointing at
-Grafana's own static path (`/public/fonts/inter/…`), which this app does not
-serve. The browser logs a font-decode warning and falls back to the system UI
-font. Vendoring the Inter woff2 files under `public/public/fonts/inter/` would
-clear it.
+`GlobalStyles` and `Icon` from `@grafana/ui` request static assets from
+Grafana's own paths (`public/fonts/…`, `public/build/img/icons/…`) when
+`window.__grafana_public_path__` / `window.__grafana_build_path__` aren't set,
+which is the case here. `public/public/fonts/` and
+`public/public/build/img/icons/` vendor the Inter and Roboto Mono woff2 files
+and the full icon set from
+[grafana/grafana](https://github.com/grafana/grafana/tree/main/public) so both
+resolve against Vite's own static file serving instead of 404ing.
+
+### Known gaps
 
 React Router 6 logs two `v7_*` future-flag warnings. Passing
 `future={{ v7_startTransition: true, v7_relativeSplatPath: true }}` to
