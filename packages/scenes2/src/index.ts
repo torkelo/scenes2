@@ -17,6 +17,7 @@ export {
   TimeRangeContextProvider,
 } from './time/TimeRangeContext';
 export { TimeRangeContextPicker } from './time/TimeRangeContextPicker';
+export { TimeRangeRefresh } from './time/TimeRangeRefresh';
 export { UrlKeyManager as UrlStateRegistry } from './url/UrlKeyMapper';
 export {
   type UrlStateContextValue as UrlState,
