@@ -8,6 +8,7 @@ export enum ROUTES {
   WithDrilldown = 'page-with-drilldown',
   HelloWorld = 'hello-world',
   PanelGridLayoutDemo = 'panel-grid-layout-demo',
+  VariablesDemo = 'variables-demo',
 }
 
 export const DATASOURCE_REF = {
