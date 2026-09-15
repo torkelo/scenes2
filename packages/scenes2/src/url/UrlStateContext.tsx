@@ -162,7 +162,7 @@ export function UrlStateProvider({
  * keys that were claimed.
  *
  * ```tsx
- * const [url, setUrl] = useUrlSync<{ from: string; to: string }>(['from', 'to']);
+ * const [url, setUrl] = useUrlState<{ from: string; to: string }>(['from', 'to']);
  *
  * setUrl({ from: 'now-1h', to: 'now' });
  * ```
@@ -182,12 +182,10 @@ export function UrlStateProvider({
  * component has to go through the returned writer instead of touching the query
  * string itself.
  */
-export function useUrlSync<T extends object>(
+export function useUrlState<T extends object>(
   keys: readonly (keyof T & string)[],
 ): [UrlValues<T>, (update: T) => void] {
-  const local = useLocalUrlState();
-  const { registry, getParams, subscribe, write } =
-    useContext(UrlStateContext) ?? local;
+  const { registry, getParams, subscribe, write } = useUrlStateStore();
   const owner = useId();
   const [claimedKeys] = useState(() => [...keys]);
 
@@ -250,17 +248,30 @@ export function useUrlSync<T extends object>(
 }
 
 /**
- * The state a consumer falls back to without a {@link UrlStateProvider} above
- * it. The values live in a query string of the consumer's own and never reach
- * the URL, and so does the registry, so its keys never collide with anyone's.
+ * The url state a consumer syncs through: the one from the closest
+ * {@link UrlStateProvider} above it, or one of its own when there is none.
+ *
+ * Both come out of one state initializer rather than a hook each, so a consumer
+ * under a provider never creates a local state, and one without a provider
+ * creates it once, on its first render. Calling one hook or the other instead
+ * would change the hook order of a consumer whose provider arrives later.
  */
-function useLocalUrlState(): UrlStateContextValue {
-  const [local] = useState(createLocalUrlState);
+function useUrlStateStore(): UrlStateContextValue {
+  const context = useContext(UrlStateContext);
 
-  return local;
+  if (context) {
+    return context;
+  }
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  return useMemo(() => createLocalUrlState(), []);
 }
 
-/** A query string of its own, which only the consumer that made it can see. */
+/**
+ * A query string of its own, which only the consumer that made it can see. The
+ * values never reach the URL, and neither does the registry, so its keys never
+ * collide with anyone's.
+ */
 function createLocalUrlState(): UrlStateContextValue {
   const registry = new UrlKeyManager();
   const listeners = new Set<() => void>();
@@ -360,7 +371,7 @@ function urlKeyOf(claimed: Readonly<Record<string, string>>, key: string) {
   const urlKey = claimed[key];
 
   if (!urlKey) {
-    throw new Error(`Url key "${key}" was not claimed by useUrlSync`);
+    throw new Error(`Url key "${key}" was not claimed by useUrlState`);
   }
 
   return urlKey;

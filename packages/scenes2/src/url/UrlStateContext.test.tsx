@@ -7,7 +7,7 @@ import { UrlKeyManager } from './UrlKeyMapper';
 import {
   UrlStateProvider,
   type UrlValues,
-  useUrlSync,
+  useUrlState,
 } from './UrlStateContext';
 
 /** The shape a consumer declares, which its keys and writes go by. */
@@ -17,7 +17,7 @@ interface Filters {
 }
 
 /** What the hook hands back: the values it read, and the way to write them. */
-type Sync = ReturnType<typeof useUrlSync<Filters>>;
+type Sync = ReturnType<typeof useUrlState<Filters>>;
 
 const keys = ['query', 'page'] as const;
 
@@ -45,7 +45,7 @@ function renderSynced({
 }: SyncedOptions = {}) {
   const { result } = renderHook(
     () => ({
-      sync: useUrlSync<Filters>(keys),
+      sync: useUrlState<Filters>(keys),
       location: useLocation(),
       navigate: useNavigate(),
     }),
@@ -83,14 +83,16 @@ function renderSynced({
  * back to a query string of their own.
  */
 function renderLocal() {
-  const { result } = renderHook(() => [
-    useUrlSync<Filters>(keys),
-    useUrlSync<Filters>(keys),
+  const { result, rerender } = renderHook(() => [
+    useUrlState<Filters>(keys),
+    useUrlState<Filters>(keys),
   ]);
 
   return {
     first: consumer(() => result.current[0]),
     second: consumer(() => result.current[1]),
+    /** Renders the consumers again, the way a parent re-render would. */
+    rerender: () => act(() => rerender()),
   };
 }
 
@@ -121,7 +123,7 @@ function renderCounted(entry: string) {
   const renders: Array<UrlValues<Filters>> = [];
 
   function Consumer() {
-    const [state] = useUrlSync<Filters>(keys);
+    const [state] = useUrlState<Filters>(keys);
 
     renders.push(state);
 
@@ -154,12 +156,12 @@ function renderCounted(entry: string) {
 
 /** A consumer above the one under test, holding the unnumbered keys. */
 function OuterConsumer({ children }: { children: ReactNode }) {
-  useUrlSync<Filters>(keys);
+  useUrlState<Filters>(keys);
 
   return <>{children}</>;
 }
 
-describe('useUrlSync', () => {
+describe('useUrlState', () => {
   describe('under a provider', () => {
     it('hands over the values the consumer mounted on', () => {
       const synced = renderSynced({ entry: '/?query=cpu&page=3' });
@@ -305,6 +307,18 @@ describe('useUrlSync', () => {
 
       expect(local.first.state()).toEqual({ query: 'cpu' });
       expect(window.location.search).toBe(search);
+    });
+
+    it('keeps the values it holds through a re-render', () => {
+      const local = renderLocal();
+
+      local.first.update({ query: 'cpu' });
+      local.rerender();
+
+      // The query string a consumer falls back to is made on its first render
+      // and kept. A second one made on a later render would come up empty and
+      // drop the values the consumer had already written.
+      expect(local.first.state()).toEqual({ query: 'cpu' });
     });
 
     it('keeps two consumers from seeing each other', () => {

@@ -4,7 +4,7 @@ import { type DateTime, getTimeZone, type TimeRange } from '@grafana/data';
 import type { TimeZone } from '@grafana/schema';
 
 import { useCache } from '../caching/CacheContext';
-import { useUrlSync } from '../url/UrlStateContext';
+import { useUrlState } from '../url/UrlStateContext';
 import { evaluateTimeRange, getValidTimeZone, isValid } from './utils';
 
 /** The part of the state that a `cacheKey` remembers across an unmount. */
@@ -101,7 +101,7 @@ function useTimeRangeState({
   const cache = useCache();
   const [refreshCounter, setRefreshCounter] = useState<number>(0);
 
-  const [urlState, updateUrlState] = useUrlSync<TimeRangeUrlState>(urlKeys);
+  const [urlState, updateUrlState] = useUrlState<TimeRangeUrlState>(urlKeys);
 
   const onChangeTimeRange = useCallback(
     (timeRange: TimeRange) => {

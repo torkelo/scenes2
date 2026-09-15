@@ -24,7 +24,7 @@ export {
   UrlStateProvider,
   type UrlStateProviderProps,
   type UrlValues,
-  useUrlSync,
+  useUrlState,
 } from './url/UrlStateContext';
 export { DefineVariable } from './variables/DefineVariable';
 export { useInterpolator } from './variables/interpolation/useInterpolator';
