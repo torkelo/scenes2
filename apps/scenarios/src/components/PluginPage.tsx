@@ -70,6 +70,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: 'flex',
     flexDirection: 'column',
     minHeight: '100vh',
+    backgroundColor: theme.colors.background.page,
   }),
   header: css({
     padding: theme.spacing(2, 3),
