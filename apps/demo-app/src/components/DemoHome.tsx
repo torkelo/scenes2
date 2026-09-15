@@ -1,7 +1,7 @@
-import { PluginPage } from '@grafana/runtime';
 import { Stack, TextLink } from '@grafana/ui';
 import { ROUTES } from '../constants';
 import { prefixRoute } from '../utils/utils.routing';
+import { PageWrapper } from './PageWrapper';
 
 interface DemoScenario {
   route: ROUTES;
@@ -15,7 +15,7 @@ const scenarios: DemoScenario[] = [
 
 export function DemoHome() {
   return (
-    <PluginPage>
+    <PageWrapper>
       <Stack direction="column" gap={2}>
         {scenarios.map((scenario) => (
           <TextLink key={scenario.route} href={prefixRoute(scenario.route)}>
@@ -23,6 +23,6 @@ export function DemoHome() {
           </TextLink>
         ))}
       </Stack>
-    </PluginPage>
+    </PageWrapper>
   );
 }

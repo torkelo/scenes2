@@ -1,4 +1,3 @@
-import { PluginPage } from '@grafana/runtime';
 import {
   DefineVariable,
   useInterpolator,
@@ -6,33 +5,22 @@ import {
   VizConfigBuilders,
   VizPanel,
   VariableValueSelect,
-  TimeRangeContextPicker,
-  TimeRangeContextProvider,
-  TimeRangeRefresh,
-  UrlStateProvider,
   VariableTestQuery,
 } from '@grafana/scenes2';
 import { VisibilityMode } from '@grafana/schema';
 import { GraphGradientMode, LineInterpolation, Stack } from '@grafana/ui';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 
-const queryClient = new QueryClient();
+import { PageWrapper } from './PageWrapper';
 
 export function VariablesDemo() {
   return (
-    <PluginPage>
-      <QueryClientProvider client={queryClient}>
-        <UrlStateProvider>
-          <TimeRangeContextProvider cacheKey="VariablesDemo" staleTime={30000}>
-            <DefineVariable name="service" loading={true}>
-              <VariableTestQuery name="service" query="A.*" delay={2000} />
-              <PrintVariable />
-            </DefineVariable>
-          </TimeRangeContextProvider>
-        </UrlStateProvider>
-      </QueryClientProvider>
-    </PluginPage>
+    <PageWrapper>
+      <DefineVariable name="service" loading={true}>
+        <VariableTestQuery name="service" query="A.*" delay={2000} />
+        <PrintVariable />
+      </DefineVariable>
+    </PageWrapper>
   );
 }
 
@@ -63,10 +51,6 @@ const PrintVariable = React.memo(function PrintVariable() {
       <Stack direction="column" gap={3}>
         <Stack justifyContent={'space-between'}>
           <VariableValueSelect name="service" />
-          <Stack gap={1}>
-            <TimeRangeContextPicker />
-            <TimeRangeRefresh />
-          </Stack>
         </Stack>
         <div style={{ height: 400 }}>
           <VizPanel title="Test graph" vizConfig={plainViz} data={data.data} />

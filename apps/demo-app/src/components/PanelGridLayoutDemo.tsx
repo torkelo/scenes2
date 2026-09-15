@@ -1,15 +1,6 @@
-import { PluginPage } from '@grafana/runtime';
-import {
-  PanelGridLayout,
-  TimeRangeContextProvider,
-  UrlStateProvider,
-  useDataQuery,
-  VizConfigBuilders,
-  VizPanel,
-} from '@grafana/scenes2';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { PanelGridLayout, useDataQuery, VizConfigBuilders, VizPanel } from '@grafana/scenes2';
 
-const queryClient = new QueryClient();
+import { PageWrapper } from './PageWrapper';
 
 const timeSeriesViz = VizConfigBuilders.timeseries().build();
 
@@ -17,19 +8,13 @@ const panelTitles = ['Panel A', 'Panel B', 'Panel C', 'Panel D'];
 
 export function PanelGridLayoutDemo() {
   return (
-    <PluginPage>
-      <QueryClientProvider client={queryClient}>
-        <UrlStateProvider>
-          <TimeRangeContextProvider cacheKey="PanelGridLayoutDemo" staleTime={30000}>
-            <PanelGridLayout>
-              {panelTitles.map((title) => (
-                <DemoPanel key={title} title={title} />
-              ))}
-            </PanelGridLayout>
-          </TimeRangeContextProvider>
-        </UrlStateProvider>
-      </QueryClientProvider>
-    </PluginPage>
+    <PageWrapper>
+      <PanelGridLayout>
+        {panelTitles.map((title) => (
+          <DemoPanel key={title} title={title} />
+        ))}
+      </PanelGridLayout>
+    </PageWrapper>
   );
 }
 
