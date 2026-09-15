@@ -4,9 +4,6 @@ export const PLUGIN_BASE_URL = `/a/${pluginJson.id}`;
 
 export enum ROUTES {
   Home = 'home',
-  WithTabs = 'page-with-tabs',
-  WithDrilldown = 'page-with-drilldown',
-  HelloWorld = 'hello-world',
   PanelGridLayoutDemo = 'panel-grid-layout-demo',
   VariablesDemo = 'variables-demo',
 }

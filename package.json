@@ -14,6 +14,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "turbo run test",
+    "e2e": "turbo run e2e",
+    "e2e:scenarios": "turbo run e2e --filter @grafana/scenarios",
     "preflight": "./scripts/preflight.sh",
     "link-workspace": "./scripts/link-workspace.sh",
     "unlink-workspace": "./scripts/unlink-workspace.sh",
