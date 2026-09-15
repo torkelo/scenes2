@@ -3,12 +3,12 @@ import type { ReactNode } from 'react';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
+import { UrlKeyManager } from './UrlKeyMapper';
 import {
   UrlStateProvider,
   type UrlValues,
   useUrlSync,
 } from './UrlStateContext';
-import { UrlStateRegistry } from './UrlStateRegistry';
 
 /** The shape a consumer declares, which its keys and writes go by. */
 interface Filters {
@@ -25,7 +25,7 @@ interface SyncedOptions {
   /** The query string the consumer mounts on. */
   entry?: string;
   /** A registry to hand the provider, instead of the one it makes itself. */
-  registry?: UrlStateRegistry;
+  registry?: UrlKeyManager;
   /** Claims the same keys above the consumer, so it takes numbered ones. */
   nested?: boolean;
   /** Mounts the tree twice over, the way StrictMode does in development. */
@@ -281,7 +281,7 @@ describe('useUrlSync', () => {
     });
 
     it('takes a registry from the provider', () => {
-      const registry = new UrlStateRegistry();
+      const registry = new UrlKeyManager();
 
       renderSynced({ registry });
 

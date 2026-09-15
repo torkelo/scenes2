@@ -12,8 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CacheProvider } from '../caching/CacheContext';
 import { MemoryCache } from '../caching/MemoryCache';
 import { useTimeRange } from '../hooks/useTimeRange';
+import type { UrlKeyManager } from '../url/UrlKeyMapper';
 import { UrlStateProvider } from '../url/UrlStateContext';
-import type { UrlStateRegistry } from '../url/UrlStateRegistry';
 import {
   TimeRangeContextProvider,
   type TimeRangeContextProviderProps,
@@ -62,7 +62,7 @@ function renderWithCache(
 function renderWithUrl(
   cache: MemoryCache,
   props: Partial<TimeRangeContextProviderProps> = {},
-  registry?: UrlStateRegistry,
+  registry?: UrlKeyManager,
 ) {
   return render(
     <BrowserRouter>

@@ -13,7 +13,7 @@ import {
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import { UrlStateRegistry } from './UrlStateRegistry';
+import { UrlKeyManager } from './UrlKeyMapper';
 
 /**
  * The value of each url key a consumer claimed, under the name it asked for
@@ -27,15 +27,15 @@ export type UrlValues<T> = { readonly [K in keyof T]?: string | undefined };
 /**
  * The query string of one subtree, and the way to change it.
  *
- * The query string is behind {@link UrlState.getParams} rather than on the
+ * The query string is behind {@link UrlStateContextValue.getParams} rather than on the
  * context itself, because a value on the context would re-render every consumer
  * below the provider on every location change. Read it through
- * {@link UrlState.subscribe} instead, and a consumer only renders again when the
+ * {@link UrlStateContextValue.subscribe} instead, and a consumer only renders again when the
  * keys it cares about move.
  */
-export interface UrlState {
+export interface UrlStateContextValue {
   /** Hands out the url keys, so that two consumers never share one. */
-  readonly registry: UrlStateRegistry;
+  readonly registry: UrlKeyManager;
   /** The query string as it stands. */
   getParams(): URLSearchParams;
   /**
@@ -52,13 +52,15 @@ export interface UrlState {
  * default: without a {@link UrlStateProvider} above them, consumers keep their
  * state to themselves and leave the URL alone.
  */
-export const UrlStateContext = createContext<UrlState | undefined>(undefined);
+export const UrlStateContext = createContext<UrlStateContextValue | undefined>(
+  undefined,
+);
 
 export interface UrlStateProviderProps {
   /**
    * Registry to share with the subtree. Omit to create one for this provider.
    */
-  registry?: UrlStateRegistry;
+  registry?: UrlKeyManager;
   children: React.ReactNode;
 }
 
@@ -71,13 +73,13 @@ export interface UrlStateProviderProps {
  * `Link`, or another consumer.
  *
  * Nested consumers that want the same url key take a numbered one instead —
- * see {@link UrlStateRegistry}.
+ * see {@link UrlKeyManager}.
  */
 export function UrlStateProvider({
   registry,
   children,
 }: UrlStateProviderProps) {
-  const [ownRegistry] = useState(() => new UrlStateRegistry());
+  const [ownRegistry] = useState(() => new UrlKeyManager());
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -105,11 +107,13 @@ export function UrlStateProvider({
   };
 
   const latest = useRef(current);
+
+  //eslint-disable-next-line react-hooks/refs
   latest.current = current;
 
   const [listeners] = useState(() => new Set<() => void>());
 
-  const [value] = useState<UrlState>(() => ({
+  const [value] = useState<UrlStateContextValue>(() => ({
     get registry() {
       return latest.current.registry;
     },
@@ -250,15 +254,15 @@ export function useUrlSync<T extends object>(
  * it. The values live in a query string of the consumer's own and never reach
  * the URL, and so does the registry, so its keys never collide with anyone's.
  */
-function useLocalUrlState(): UrlState {
+function useLocalUrlState(): UrlStateContextValue {
   const [local] = useState(createLocalUrlState);
 
   return local;
 }
 
 /** A query string of its own, which only the consumer that made it can see. */
-function createLocalUrlState(): UrlState {
-  const registry = new UrlStateRegistry();
+function createLocalUrlState(): UrlStateContextValue {
+  const registry = new UrlKeyManager();
   const listeners = new Set<() => void>();
   let params = new URLSearchParams();
 

@@ -11,7 +11,7 @@
  * `UrlStateProvider`, which goes through the router so that a write reaches
  * everyone subscribed to the location.
  */
-export class UrlStateRegistry {
+export class UrlKeyManager {
   /** Owner id to the keys it asked for, mapped to the keys it was given. */
   #claims = new Map<string, Readonly<Record<string, string>>>();
 
