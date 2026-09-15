@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { UrlStateRegistry } from './UrlStateRegistry';
+import { UrlKeyManager } from './UrlKeyMapper';
 
-describe('UrlStateRegistry', () => {
-  let registry: UrlStateRegistry;
+describe('UrlKeyManager', () => {
+  let registry: UrlKeyManager;
 
   beforeEach(() => {
-    registry = new UrlStateRegistry();
+    registry = new UrlKeyManager();
   });
 
   describe('claim', () => {

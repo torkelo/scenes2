@@ -14,8 +14,7 @@ export function useVizPanel(props: VizPanelProps) {
   const { data: rawData, vizConfig } = props;
   const plugin = usePanelPlugin(vizConfig.pluginId);
 
-  // The plugin owns the defaults for its options and field config, so they can
-  // only be applied once it has loaded.
+  // Apply plugin option and field config defaults
   const withDefaults = useMemo(() => {
     if (!plugin) {
       return { fieldConfig: vizConfig.fieldConfig, options: vizConfig.options };
@@ -31,11 +30,13 @@ export function useVizPanel(props: VizPanelProps) {
     });
   }, [plugin, vizConfig.options, vizConfig.fieldConfig]);
 
-  const rawFrames = rawData?.series ?? [];
+  const rawFrames = rawData?.series;
+  const timeZone = rawData?.request?.timezone;
 
+  // Apply field overrides to data frames
   const appliedFrames = useMemo(() => {
-    if (!plugin || !rawData) {
-      return rawFrames;
+    if (!plugin) {
+      return rawFrames ?? [];
     }
 
     const fieldConfigRegistry = plugin.fieldConfigRegistry;
@@ -45,9 +46,9 @@ export function useVizPanel(props: VizPanelProps) {
       fieldConfigRegistry,
       replaceVariables: (value: string) => value,
       theme: config.theme2,
-      timeZone: rawData.request?.timezone,
+      timeZone: timeZone,
     });
-  }, [rawFrames, withDefaults.fieldConfig]);
+  }, [rawFrames, withDefaults.fieldConfig, timeZone, plugin]);
 
   const panelDataApplied = useMemo(() => {
     if (!rawData) {
@@ -83,8 +84,7 @@ function usePanelPlugin(pluginId: string) {
     const cached = pluginImportUtils.getPanelPluginFromCache(pluginId);
 
     if (cached) {
-      // Same instance as the one the initial state picked up, so React bails
-      // out of the re-render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPlugin(cached);
       return;
     }

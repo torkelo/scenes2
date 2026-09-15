@@ -1,13 +1,19 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from '@testing-library/react';
 import { StrictMode } from 'react';
-import { BrowserRouter, MemoryRouter, useNavigate } from 'react-router-dom';
+import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CacheProvider } from '../caching/CacheContext';
 import { MemoryCache } from '../caching/MemoryCache';
 import { useTimeRange } from '../hooks/useTimeRange';
+import type { UrlKeyManager } from '../url/UrlKeyMapper';
 import { UrlStateProvider } from '../url/UrlStateContext';
-import { UrlStateRegistry } from '../url/UrlStateRegistry';
 import {
   TimeRangeContextProvider,
   type TimeRangeContextProviderProps,
@@ -56,7 +62,7 @@ function renderWithCache(
 function renderWithUrl(
   cache: MemoryCache,
   props: Partial<TimeRangeContextProviderProps> = {},
-  registry?: UrlStateRegistry,
+  registry?: UrlKeyManager,
 ) {
   return render(
     <BrowserRouter>
@@ -71,17 +77,28 @@ function renderWithUrl(
   );
 }
 
-function renderNestedWithUrl(registry?: UrlStateRegistry) {
+function renderScenarioWithProps(
+  initialUrl?: string,
+  props: Partial<TimeRangeContextProviderProps> = {},
+) {
+  window.history.replaceState(null, '', initialUrl ?? '/');
+
   return render(
     <BrowserRouter>
-      <UrlStateProvider registry={registry}>
-        <TimeRangeContextProvider>
-          <ShowTimeRange />
-          <TimeRangeContextProvider initFrom="now-2d">
-            <ShowTimeRange name="inner" />
+      <CacheProvider>
+        <UrlStateProvider>
+          <TimeRangeContextProvider>
+            <ShowTimeRange />
+            <TimeRangeContextProvider initFrom="now-2d" {...props}>
+              <ShowTimeRange name="inner" />
+            </TimeRangeContextProvider>
           </TimeRangeContextProvider>
-        </TimeRangeContextProvider>
-      </UrlStateProvider>
+          <GoTo search="?from=now-15m&to=now" />
+          <GoTo search="?from=now-2d" />
+          <GoTo search="?from=nonsense" />
+          <GoBack />
+        </UrlStateProvider>
+      </CacheProvider>
     </BrowserRouter>,
   );
 }
@@ -108,6 +125,13 @@ function GoBack() {
 
 function goBack() {
   fireEvent.click(screen.getByRole('button', { name: 'go back' }));
+
+  // jsdom traverses its session history on queued timeouts and fires popstate
+  // on another one, so the fake timers these tests run on have to be let
+  // through before the router sees the earlier entry.
+  act(() => {
+    vi.runAllTimers();
+  });
 }
 
 function readState(name = 'outer') {
@@ -139,107 +163,94 @@ describe('TimeRangeContextProvider', () => {
     vi.useRealTimers();
   });
 
-  it('evaluates initFrom/initTo again on remount when there is no cacheKey', () => {
-    renderWithCache(cache).unmount();
-    vi.advanceTimersByTime(60000);
-    renderWithCache(cache);
-    const first = readState();
+  describe('Time range caching', () => {
+    it('restores the cached state on remount', () => {
+      renderWithCache(cache, { cacheKey: 'test' });
+      const before = readState();
 
-    expect(first.raw).toBe('now-6h to now');
+      cleanup();
+      vi.advanceTimersByTime(1000);
+      renderWithCache(cache, { cacheKey: 'test' });
 
-    cleanup();
-    vi.advanceTimersByTime(60000);
-    renderWithCache(cache);
+      expect(readState()).toEqual(before);
+    });
 
-    expect(readState().evaluated).not.toBe(first.evaluated);
-  });
+    it('remembers a changed time range across a remount', () => {
+      renderWithCache(cache, { cacheKey: 'test' });
+      selectLast1h();
 
-  it('restores the cached state on remount', () => {
-    renderWithCache(cache, { cacheKey: 'test' });
-    const before = readState();
+      const changed = readState();
+      expect(changed.raw).toBe('now-1h to now');
 
-    cleanup();
-    vi.advanceTimersByTime(1000);
-    renderWithCache(cache, { cacheKey: 'test' });
+      cleanup();
+      vi.advanceTimersByTime(1000);
+      renderWithCache(cache, { cacheKey: 'test' });
 
-    expect(readState()).toEqual(before);
-  });
+      expect(readState()).toEqual(changed);
+    });
 
-  it('remembers a changed time range across a remount', () => {
-    renderWithCache(cache, { cacheKey: 'test' });
-    selectLast1h();
+    it('ignores the cached state once staleTime has passed', () => {
+      renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
+      selectLast1h();
+      const before = readState();
 
-    const changed = readState();
-    expect(changed.raw).toBe('now-1h to now');
+      cleanup();
+      vi.advanceTimersByTime(5001);
+      renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
 
-    cleanup();
-    vi.advanceTimersByTime(1000);
-    renderWithCache(cache, { cacheKey: 'test' });
+      expect(readState().raw).toBe('now-6h to now');
+      expect(readState().evaluated).not.toBe(before.evaluated);
+    });
 
-    expect(readState()).toEqual(changed);
-  });
+    it('counts staleTime from the last change, not from the first mount', () => {
+      renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
+      vi.advanceTimersByTime(4000);
+      selectLast1h();
 
-  it('ignores the cached state once staleTime has passed', () => {
-    renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
-    selectLast1h();
-    const before = readState();
+      const changed = readState();
 
-    cleanup();
-    vi.advanceTimersByTime(5001);
-    renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
+      cleanup();
+      vi.advanceTimersByTime(4000);
+      renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
 
-    expect(readState().raw).toBe('now-6h to now');
-    expect(readState().evaluated).not.toBe(before.evaluated);
-  });
+      expect(readState()).toEqual(changed);
+    });
 
-  it('counts staleTime from the last change, not from the first mount', () => {
-    renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
-    vi.advanceTimersByTime(4000);
-    selectLast1h();
+    it('does not extend staleTime by remounting', () => {
+      renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
+      const before = readState();
 
-    const changed = readState();
+      cleanup();
+      vi.advanceTimersByTime(4000);
+      renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
+      expect(readState()).toEqual(before);
 
-    cleanup();
-    vi.advanceTimersByTime(4000);
-    renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
+      cleanup();
+      vi.advanceTimersByTime(1001);
+      renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
 
-    expect(readState()).toEqual(changed);
-  });
+      expect(readState().evaluated).not.toBe(before.evaluated);
+    });
 
-  it('does not extend staleTime by remounting', () => {
-    renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
-    const before = readState();
+    it('keeps separate state per cacheKey', () => {
+      renderWithCache(cache, { cacheKey: 'a' });
+      selectLast1h();
 
-    cleanup();
-    vi.advanceTimersByTime(4000);
-    renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
-    expect(readState()).toEqual(before);
+      cleanup();
+      renderWithCache(cache, { cacheKey: 'b', initFrom: 'now-12h' });
 
-    cleanup();
-    vi.advanceTimersByTime(1001);
-    renderWithCache(cache, { cacheKey: 'test', staleTime: 5000 });
+      expect(readState().raw).toBe('now-12h to now');
+    });
 
-    expect(readState().evaluated).not.toBe(before.evaluated);
-  });
+    it('prefers the cached range over initFrom/initTo', () => {
+      renderWithCache(cache, { cacheKey: 'test', initFrom: 'now-6h' });
+      selectLast1h();
 
-  it('keeps separate state per cacheKey', () => {
-    renderWithCache(cache, { cacheKey: 'a' });
-    selectLast1h();
+      cleanup();
+      renderWithCache(cache, { cacheKey: 'test', initFrom: 'now-12h' });
 
-    cleanup();
-    renderWithCache(cache, { cacheKey: 'b', initFrom: 'now-12h' });
-
-    expect(readState().raw).toBe('now-12h to now');
-  });
-
-  it('prefers the cached range over initFrom/initTo', () => {
-    renderWithCache(cache, { cacheKey: 'test', initFrom: 'now-6h' });
-    selectLast1h();
-
-    cleanup();
-    renderWithCache(cache, { cacheKey: 'test', initFrom: 'now-12h' });
-
-    expect(readState().raw).toBe('now-1h to now');
+      expect(readState().raw).toBe('now-1h to now');
+    });
   });
 
   describe('url sync', () => {
@@ -300,7 +311,7 @@ describe('TimeRangeContextProvider', () => {
     });
 
     it('gives a nested provider its own numbered keys', () => {
-      renderNestedWithUrl();
+      renderScenarioWithProps();
       selectLast1h('inner');
 
       expect(queryParams()).toEqual({ from2: 'now-1h', to2: 'now' });
@@ -316,12 +327,7 @@ describe('TimeRangeContextProvider', () => {
     });
 
     it('starts a nested provider on the range its numbered keys hold', () => {
-      window.history.replaceState(
-        null,
-        '',
-        '/?from=now-3h&to=now&from2=now-15m&to2=now',
-      );
-      renderNestedWithUrl();
+      renderScenarioWithProps('/?from=now-3h&to=now&from2=now-15m&to2=now');
 
       expect(readState().raw).toBe('now-3h to now');
       expect(readState('inner').raw).toBe('now-15m to now');
@@ -348,11 +354,9 @@ describe('TimeRangeContextProvider', () => {
     });
 
     it('hands the keys back when a provider unmounts', () => {
-      const registry = new UrlStateRegistry();
-
-      renderNestedWithUrl(registry);
+      renderScenarioWithProps();
       cleanup();
-      renderWithUrl(cache, {}, registry);
+      renderScenarioWithProps();
       selectLast1h();
 
       expect(queryParams()).toEqual({ from: 'now-1h', to: 'now' });
@@ -369,24 +373,8 @@ describe('TimeRangeContextProvider', () => {
   });
 
   describe('url subscription', () => {
-    function renderInRouter(entry: string, props = {}) {
-      return render(
-        <MemoryRouter initialEntries={[entry]}>
-          <UrlStateProvider>
-            <TimeRangeContextProvider {...props}>
-              <ShowTimeRange />
-            </TimeRangeContextProvider>
-            <GoTo search="?from=now-15m&to=now" />
-            <GoTo search="?from=now-2d" />
-            <GoTo search="?from=nonsense" />
-            <GoBack />
-          </UrlStateProvider>
-        </MemoryRouter>,
-      );
-    }
-
     it('follows a range the rest of the app puts in the URL', () => {
-      renderInRouter('/');
+      renderScenarioWithProps('/');
 
       expect(readState().raw).toBe('now-6h to now');
 
@@ -396,7 +384,7 @@ describe('TimeRangeContextProvider', () => {
     });
 
     it('re-evaluates the range it follows to', () => {
-      renderInRouter('/?from=now-15m&to=now');
+      renderScenarioWithProps('/?from=now-15m&to=now');
       const before = readState();
 
       goTo('?from=now-2d');
@@ -408,7 +396,7 @@ describe('TimeRangeContextProvider', () => {
     });
 
     it('keeps the half the URL drops', () => {
-      renderInRouter('/?from=now-3h&to=now-1h');
+      renderScenarioWithProps('/?from=now-3h&to=now-1h');
 
       goTo('?from=now-2d');
 
@@ -416,7 +404,7 @@ describe('TimeRangeContextProvider', () => {
     });
 
     it('ignores a range the URL carries that does not parse', () => {
-      renderInRouter('/?from=now-3h&to=now');
+      renderScenarioWithProps('/?from=now-3h&to=now');
 
       goTo('?from=nonsense');
 
@@ -424,10 +412,10 @@ describe('TimeRangeContextProvider', () => {
     });
 
     it('goes back to the range the previous history entry holds', () => {
-      renderInRouter('/?from=now-3h&to=now');
+      renderScenarioWithProps('/?from=now-3h&to=now');
 
-      selectLast1h();
-      expect(readState().raw).toBe('now-1h to now');
+      goTo('?from=now-2d');
+      expect(readState().raw).toBe('now-2d to now');
 
       goBack();
 

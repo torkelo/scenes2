@@ -19,6 +19,7 @@ export function useInterpolator(
     return [input, false];
   }
 
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   return React.useMemo(() => {
     return interpolate(input, context);
   }, [input, context]);

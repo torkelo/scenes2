@@ -1,253 +1,334 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { StrictMode, useState } from 'react';
-import { MemoryRouter, useNavigate } from 'react-router-dom';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
+import { describe, expect, it } from 'vitest';
 
+import { UrlKeyManager } from './UrlKeyMapper';
 import {
   UrlStateProvider,
   type UrlValues,
-  useUrlSync,
+  useUrlState,
 } from './UrlStateContext';
-import { UrlStateRegistry } from './UrlStateRegistry';
 
-/** The shape a consumer declares, which is what its keys and writes go by. */
+/** The shape a consumer declares, which its keys and writes go by. */
 interface Filters {
-  query: string;
-  page: string;
+  query?: string;
+  page?: string;
 }
+
+/** What the hook hands back: the values it read, and the way to write them. */
+type Sync = ReturnType<typeof useUrlState<Filters>>;
 
 const keys = ['query', 'page'] as const;
 
+interface SyncedOptions {
+  /** The query string the consumer mounts on. */
+  entry?: string;
+  /** A registry to hand the provider, instead of the one it makes itself. */
+  registry?: UrlKeyManager;
+  /** Claims the same keys above the consumer, so it takes numbered ones. */
+  nested?: boolean;
+  /** Mounts the tree twice over, the way StrictMode does in development. */
+  strict?: boolean;
+}
+
 /**
- * Mirrors the claimed keys into state, so a readout shows what `onChange` was
- * last handed rather than what the query string holds.
+ * Mounts a consumer under a provider inside a router, and hands back what a
+ * test does with it: read the values it was given, write through it, and move
+ * around the way the rest of the app would.
  */
-function ShowFilters({ name = 'outer' }: { name?: string }) {
-  const [values, setValues] = useState<UrlValues<Filters>>({});
-  const url = useUrlSync<Filters>(keys, setValues);
-
-  return (
-    <div>
-      <span data-testid={`${name}-values`}>{JSON.stringify(values)}</span>
-      <span data-testid={`${name}-keys`}>{JSON.stringify(url.keys)}</span>
-      <button onClick={() => url.set({ query: 'cpu' })}>
-        {`${name} set query`}
-      </button>
-      <button onClick={() => url.set({ query: undefined })}>
-        {`${name} clear query`}
-      </button>
-      <button
-        onClick={() => {
-          url.set({ query: 'cpu' });
-          url.set({ page: '2' });
-        }}
-      >
-        {`${name} set both`}
-      </button>
-    </div>
+function renderSynced({
+  entry = '/',
+  registry,
+  nested,
+  strict,
+}: SyncedOptions = {}) {
+  const { result } = renderHook(
+    () => ({
+      sync: useUrlState<Filters>(keys),
+      location: useLocation(),
+      navigate: useNavigate(),
+    }),
+    {
+      reactStrictMode: strict,
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <MemoryRouter initialEntries={[entry]}>
+          <UrlStateProvider registry={registry}>
+            {nested ? <OuterConsumer>{children}</OuterConsumer> : children}
+          </UrlStateProvider>
+        </MemoryRouter>
+      ),
+    },
   );
+
+  return {
+    ...consumer(() => result.current.sync),
+    /** The query string as it stands, which is where a write lands. */
+    search: () => result.current.location.search,
+    /** Changes the query string from outside, the way a `Link` would. */
+    goTo: (search: string) =>
+      act(() => {
+        result.current.navigate({ search });
+      }),
+    /** Steps back through the history, the way the back button would. */
+    goBack: () =>
+      act(() => {
+        result.current.navigate(-1);
+      }),
+  };
 }
 
-/** Changes the query string the way the rest of the app would. */
-function GoTo({ search }: { search: string }) {
-  const navigate = useNavigate();
+/**
+ * Mounts two consumers with no provider above them, which is where they fall
+ * back to a query string of their own.
+ */
+function renderLocal() {
+  const { result, rerender } = renderHook(() => [
+    useUrlState<Filters>(keys),
+    useUrlState<Filters>(keys),
+  ]);
 
-  return (
-    <button onClick={() => navigate({ search })}>{`go to ${search}`}</button>
-  );
+  return {
+    first: consumer(() => result.current[0]),
+    second: consumer(() => result.current[1]),
+    /** Renders the consumers again, the way a parent re-render would. */
+    rerender: () => act(() => rerender()),
+  };
 }
 
-function renderInRouter(entry: string, children: React.ReactNode) {
-  return render(
-    <MemoryRouter initialEntries={[entry]}>
-      <UrlStateProvider>{children}</UrlStateProvider>
-    </MemoryRouter>,
-  );
+/** The reads and writes of one mounted consumer, with `act` taken care of. */
+function consumer(read: () => Sync) {
+  return {
+    /** The values the consumer was last given. */
+    state: () => read()[0],
+    /** Writes through the consumer. Several updates land in the same tick. */
+    update: (...updates: Filters[]) =>
+      act(() => {
+        for (const values of updates) {
+          read()[1](values);
+        }
+      }),
+  };
 }
 
-function click(name: string) {
-  fireEvent.click(screen.getByRole('button', { name }));
-}
+/**
+ * Mounts a consumer that records the values it was handed on every render, and
+ * hands back the way to move it around.
+ *
+ * Nothing above the consumer reads the location, so React only renders it when
+ * something it subscribed to told it to. That is what makes the recorded
+ * renders worth counting.
+ */
+function renderCounted(entry: string) {
+  const renders: Array<UrlValues<Filters>> = [];
 
-function readValues(name = 'outer') {
-  return JSON.parse(screen.getByTestId(`${name}-values`).textContent ?? '');
-}
+  function Consumer() {
+    const [state] = useUrlState<Filters>(keys);
 
-function readKeys(name = 'outer') {
-  return JSON.parse(screen.getByTestId(`${name}-keys`).textContent ?? '');
-}
+    renders.push(state);
 
-describe('useUrlSync', () => {
-  beforeEach(() => {
-    window.history.replaceState(null, '', '/');
+    return null;
+  }
+
+  // The consumer sits beside the hook rather than in it, so that reading the
+  // location to navigate with is not itself a reason for the consumer to render.
+  const { result } = renderHook(() => useNavigate(), {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <MemoryRouter initialEntries={[entry]}>
+        <UrlStateProvider>
+          <Consumer />
+          {children}
+        </UrlStateProvider>
+      </MemoryRouter>
+    ),
   });
 
-  describe('with a provider', () => {
-    it('hands onChange what the query string holds on mount', () => {
-      renderInRouter('/?query=cpu&page=3', <ShowFilters />);
+  return {
+    /** The values the consumer was handed, one entry per render. */
+    renders,
+    /** Changes the query string from outside, the way a `Link` would. */
+    goTo: (search: string) =>
+      act(() => {
+        result.current({ search });
+      }),
+  };
+}
 
-      expect(readValues()).toEqual({ query: 'cpu', page: '3' });
+/** A consumer above the one under test, holding the unnumbered keys. */
+function OuterConsumer({ children }: { children: ReactNode }) {
+  useUrlState<Filters>(keys);
+
+  return <>{children}</>;
+}
+
+describe('useUrlState', () => {
+  describe('under a provider', () => {
+    it('hands over the values the consumer mounted on', () => {
+      const synced = renderSynced({ entry: '/?query=cpu&page=3' });
+
+      expect(synced.state()).toEqual({ query: 'cpu', page: '3' });
     });
 
-    it('leaves out a key the query string has no value for', () => {
-      renderInRouter('/?page=3', <ShowFilters />);
+    it('leaves out keys the query string has no value for', () => {
+      const synced = renderSynced({ entry: '/?page=3&unrelated=1' });
 
-      expect(readValues()).toEqual({ page: '3' });
+      expect(synced.state()).toEqual({ page: '3' });
     });
 
-    it('calls onChange again when the location changes', () => {
-      renderInRouter(
-        '/',
-        <>
-          <ShowFilters />
-          <GoTo search="?query=mem&page=1" />
-        </>,
-      );
+    it('hands over the new values when the location changes', () => {
+      const synced = renderSynced();
 
-      expect(readValues()).toEqual({});
+      expect(synced.state()).toEqual({});
 
-      click('go to ?query=mem&page=1');
+      synced.goTo('?query=mem&page=1');
 
-      expect(readValues()).toEqual({ query: 'mem', page: '1' });
+      expect(synced.state()).toEqual({ query: 'mem', page: '1' });
     });
 
-    it('writes a claimed key to the query string', () => {
-      renderInRouter('/?page=3', <ShowFilters />);
+    it('writes a value to the query string', () => {
+      const synced = renderSynced({ entry: '/?unrelated=1' });
 
-      click('outer set query');
+      synced.update({ query: 'cpu' });
 
-      expect(readValues()).toEqual({ query: 'cpu', page: '3' });
+      expect(synced.state()).toEqual({ query: 'cpu' });
+      expect(synced.search()).toBe('?unrelated=1&query=cpu');
     });
 
     it('removes a key written as undefined', () => {
-      renderInRouter('/?query=cpu&page=3', <ShowFilters />);
+      const synced = renderSynced({ entry: '/?query=cpu&page=3' });
 
-      click('outer clear query');
+      synced.update({ query: undefined });
 
-      expect(readValues()).toEqual({ page: '3' });
+      expect(synced.state()).toEqual({ page: '3' });
+      expect(synced.search()).toBe('?page=3');
     });
 
     it('stacks two writes made in the same tick', () => {
-      renderInRouter('/', <ShowFilters />);
+      const synced = renderSynced();
 
-      click('outer set both');
+      synced.update({ query: 'cpu' }, { page: '2' });
 
-      expect(readValues()).toEqual({ query: 'cpu', page: '2' });
+      expect(synced.state()).toEqual({ query: 'cpu', page: '2' });
+      expect(synced.search()).toBe('?query=cpu&page=2');
     });
 
-    it('leaves the query string alone until a write', () => {
-      renderInRouter('/?unrelated=1', <ShowFilters />);
+    it('leaves the history alone for a write that changes nothing', () => {
+      const synced = renderSynced();
 
-      expect(readValues()).toEqual({});
+      synced.update({ query: 'cpu' });
+      synced.update({ query: 'cpu' });
+      synced.goBack();
+
+      // One entry for the write that changed something, and none for the one
+      // that did not, or the back button would look broken.
+      expect(synced.search()).toBe('');
     });
 
-    it('gives the keys it asked for to the first consumer only', () => {
-      renderInRouter(
-        '/',
-        <>
-          <ShowFilters />
-          <ShowFilters name="inner" />
-        </>,
-      );
+    it('gives a nested consumer numbered keys', () => {
+      const synced = renderSynced({
+        entry: '/?query=outer&query2=inner',
+        nested: true,
+      });
 
-      expect(readKeys()).toEqual({ query: 'query', page: 'page' });
-      expect(readKeys('inner')).toEqual({ query: 'query2', page: 'page2' });
+      expect(synced.state()).toEqual({ query: 'inner' });
+
+      synced.update({ query: 'mem' });
+
+      expect(synced.state()).toEqual({ query: 'mem' });
+      expect(synced.search()).toBe('?query=outer&query2=mem');
     });
 
-    it('keeps two consumers on their own keys', () => {
-      renderInRouter(
-        '/?query=cpu&query2=mem',
-        <>
-          <ShowFilters />
-          <ShowFilters name="inner" />
-        </>,
-      );
+    it('keeps the numbered keys across a StrictMode remount', () => {
+      // The remount releases both consumers and claims again child before
+      // parent, the reverse of the order the keys went out in. Without the
+      // re-claim by name, the two swap keys on the next render and the nested
+      // consumer starts reading `query` out from under its parent.
+      const synced = renderSynced({
+        entry: '/?query=outer&query2=inner',
+        nested: true,
+        strict: true,
+      });
 
-      expect(readValues()).toEqual({ query: 'cpu' });
-      expect(readValues('inner')).toEqual({ query: 'mem' });
+      expect(synced.state()).toEqual({ query: 'inner' });
 
-      click('inner set query');
+      synced.update({ query: 'mem' });
 
-      expect(readValues()).toEqual({ query: 'cpu' });
-      expect(readValues('inner')).toEqual({ query: 'cpu' });
+      expect(synced.state()).toEqual({ query: 'mem' });
+      expect(synced.search()).toBe('?query=outer&query2=mem');
     });
 
-    it('shares a registry passed to the provider', () => {
-      const registry = new UrlStateRegistry();
+    it('leaves a consumer alone when the location change misses its keys', () => {
+      const counted = renderCounted('/?query=cpu&page=2');
 
-      render(
-        <MemoryRouter>
-          <UrlStateProvider registry={registry}>
-            <ShowFilters />
-          </UrlStateProvider>
-        </MemoryRouter>,
-      );
+      expect(counted.renders).toHaveLength(1);
 
-      expect(registry.claim('other', ['query'])).toEqual({ query: 'query2' });
+      counted.goTo('?query=cpu&page=2&from=now');
+
+      // `from` is nothing to this consumer and its own keys did not move, so it
+      // has no new values to render and no reason to render again. The values it
+      // already holds come back as the same object, so neither does anything
+      // below it that has them in a dependency array.
+      expect(counted.renders).toHaveLength(1);
+      expect(counted.renders[0]).toEqual({ query: 'cpu', page: '2' });
     });
 
-    it('gives out the same keys under StrictMode', () => {
-      render(
-        <StrictMode>
-          <MemoryRouter>
-            <UrlStateProvider>
-              <ShowFilters />
-              <ShowFilters name="inner" />
-            </UrlStateProvider>
-          </MemoryRouter>
-        </StrictMode>,
-      );
+    it('renders a consumer again when one of its keys moves', () => {
+      const counted = renderCounted('/?query=cpu&page=2');
 
-      expect(readKeys()).toEqual({ query: 'query', page: 'page' });
-      expect(readKeys('inner')).toEqual({ query: 'query2', page: 'page2' });
+      counted.goTo('?query=mem&page=2');
+
+      expect(counted.renders).toHaveLength(2);
+      expect(counted.renders[1]).toEqual({ query: 'mem', page: '2' });
+      expect(counted.renders[1]).not.toBe(counted.renders[0]);
+    });
+
+    it('takes a registry from the provider', () => {
+      const registry = new UrlKeyManager();
+
+      renderSynced({ registry });
+
+      // The consumer's keys came out of the registry passed in, so the next
+      // owner to ask for them is given numbered ones.
+      expect(registry.claim('other', keys)).toEqual({
+        query: 'query2',
+        page: 'page2',
+      });
     });
   });
 
   describe('without a provider', () => {
-    it('keeps the values in React state', () => {
-      render(<ShowFilters />);
+    it('keeps the values in React state and out of the query string', () => {
+      const { search } = window.location;
+      const local = renderLocal();
 
-      expect(readValues()).toEqual({});
+      expect(local.first.state()).toEqual({});
 
-      click('outer set query');
+      local.first.update({ query: 'cpu' });
 
-      expect(readValues()).toEqual({ query: 'cpu' });
+      expect(local.first.state()).toEqual({ query: 'cpu' });
+      expect(window.location.search).toBe(search);
     });
 
-    it('leaves the query string alone', () => {
-      window.history.replaceState(null, '', '/?query=disk');
-      render(<ShowFilters />);
+    it('keeps the values it holds through a re-render', () => {
+      const local = renderLocal();
 
-      click('outer set query');
+      local.first.update({ query: 'cpu' });
+      local.rerender();
 
-      expect(new URL(window.location.href).search).toBe('?query=disk');
-      expect(readValues()).toEqual({ query: 'cpu' });
-    });
-
-    it('gives every consumer the keys it asked for', () => {
-      render(
-        <>
-          <ShowFilters />
-          <ShowFilters name="inner" />
-        </>,
-      );
-
-      expect(readKeys()).toEqual({ query: 'query', page: 'page' });
-      expect(readKeys('inner')).toEqual({ query: 'query', page: 'page' });
+      // The query string a consumer falls back to is made on its first render
+      // and kept. A second one made on a later render would come up empty and
+      // drop the values the consumer had already written.
+      expect(local.first.state()).toEqual({ query: 'cpu' });
     });
 
     it('keeps two consumers from seeing each other', () => {
-      render(
-        <>
-          <ShowFilters />
-          <ShowFilters name="inner" />
-        </>,
-      );
+      const local = renderLocal();
 
-      click('inner set query');
+      local.first.update({ query: 'cpu' });
+      local.second.update({ page: '2' });
 
-      expect(readValues()).toEqual({});
-      expect(readValues('inner')).toEqual({ query: 'cpu' });
+      expect(local.first.state()).toEqual({ query: 'cpu' });
+      expect(local.second.state()).toEqual({ page: '2' });
     });
   });
 });

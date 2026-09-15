@@ -17,16 +17,15 @@ export {
   TimeRangeContextProvider,
 } from './time/TimeRangeContext';
 export { TimeRangeContextPicker } from './time/TimeRangeContextPicker';
+export { UrlKeyManager as UrlStateRegistry } from './url/UrlKeyMapper';
 export {
-  type UrlState,
+  type UrlStateContextValue as UrlState,
   UrlStateContext,
   UrlStateProvider,
   type UrlStateProviderProps,
-  type UrlSync,
   type UrlValues,
-  useUrlSync,
+  useUrlState,
 } from './url/UrlStateContext';
-export { UrlStateRegistry } from './url/UrlStateRegistry';
 export { DefineVariable } from './variables/DefineVariable';
 export { useInterpolator } from './variables/interpolation/useInterpolator';
 export { VariableTestQuery } from './variables/VariableTestQuery';

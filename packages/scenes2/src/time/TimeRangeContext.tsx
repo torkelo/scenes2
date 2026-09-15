@@ -1,16 +1,10 @@
-import {
-  createContext,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
+import { createContext, useCallback, useState } from 'react';
 import React from 'react';
 import { type DateTime, getTimeZone, type TimeRange } from '@grafana/data';
 import type { TimeZone } from '@grafana/schema';
 
 import { useCache } from '../caching/CacheContext';
-import { useUrlSync } from '../url/UrlStateContext';
+import { useUrlState } from '../url/UrlStateContext';
 import { evaluateTimeRange, getValidTimeZone, isValid } from './utils';
 
 /** The part of the state that a `cacheKey` remembers across an unmount. */
@@ -20,9 +14,14 @@ interface CachedTimeRangeState {
   value: TimeRange;
 }
 
-export interface TimeRangeContextState extends CachedTimeRangeState {
+export interface TimeRangeContextState {
+  from: string;
+  to: string;
+  value: TimeRange;
   timeZone?: TimeZone;
+  refreshCounter: number;
   onChangeTimeRange(timeRange: TimeRange): void;
+  onRefresh(): void;
 }
 
 export const TimeRangeContext = createContext<
@@ -38,8 +37,8 @@ const defaultTo = 'now';
 
 /** The raw range as the query string carries it. */
 interface TimeRangeUrlState {
-  from: string;
-  to: string;
+  from?: string;
+  to?: string;
 }
 
 /**
@@ -95,74 +94,65 @@ function useTimeRangeState({
   initFrom = defaultFrom,
   initTo = defaultTo,
   timeZone,
-  cacheKey,
+  cacheKey = 'root',
   staleTime = defaultStaleTime,
 }: TimeRangeContextProviderProps): TimeRangeContextState {
   const validTimeZone = getValidTimeZone(timeZone) || getTimeZone();
   const cache = useCache();
+  const [refreshCounter, setRefreshCounter] = useState<number>(0);
 
-  const [state, setState] = useState<CachedTimeRangeState>(() => {
-    const cached = cacheKey
-      ? cache.get<CachedTimeRangeState>(cacheKey)
-      : undefined;
-
-    return (
-      cached ??
-      evaluate(
-        validRaw(initFrom) ?? defaultFrom,
-        validRaw(initTo) ?? defaultTo,
-        validTimeZone,
-      )
-    );
-  });
-
-  // A range in the URL is what the user linked to, so it wins over both the
-  // cache and initFrom/initTo. Either half can be missing, and the range the
-  // state already holds fills in the rest. The same rule covers a later change
-  // to the URL, whether it came from the back button or from somewhere else in
-  // the app.
-  const url = useUrlSync<TimeRangeUrlState>(urlKeys, (values) =>
-    setState((current) => {
-      const from = validRaw(values.from) ?? current.from;
-      const to = validRaw(values.to) ?? current.to;
-
-      if (from === current.from && to === current.to) {
-        return current;
-      }
-
-      return evaluate(from, to, validTimeZone);
-    }),
-  );
-
-  useEffect(() => {
-    if (!cacheKey) {
-      return;
-    }
-
-    // Skip the write when the state came straight out of the cache, so
-    // remounting does not keep pushing the entry's stale time forward.
-    if (cache.get<CachedTimeRangeState>(cacheKey) === state) {
-      return;
-    }
-
-    cache.set(cacheKey, state, staleTime);
-  }, [cache, cacheKey, staleTime, state]);
+  const [urlState, updateUrlState] = useUrlState<TimeRangeUrlState>(urlKeys);
 
   const onChangeTimeRange = useCallback(
     (timeRange: TimeRange) => {
       const from = rawToString(timeRange.raw.from);
       const to = rawToString(timeRange.raw.to);
 
-      setState(evaluate(from, to, validTimeZone));
-      url.set({ from, to });
+      updateUrlState({ from, to });
     },
-    [url, validTimeZone],
+    [updateUrlState],
   );
 
-  return useMemo(
-    () => ({ ...state, onChangeTimeRange }),
-    [state, onChangeTimeRange],
-  );
+  const onRefresh = useCallback(() => {
+    setRefreshCounter((value) => value + 1);
+  }, []);
+
+  return React.useMemo(() => {
+    const cached = cache.get<CachedTimeRangeState>(cacheKey);
+    const prevFrom = cached?.from ?? initFrom;
+    const prevTo = cached?.to ?? initTo;
+
+    if (cached && shouldUseCachedState(cached, urlState)) {
+      return { onChangeTimeRange, onRefresh, refreshCounter, ...cached };
+    }
+
+    const from = validRaw(urlState.from) ?? prevFrom;
+    const to = validRaw(urlState.to) ?? prevTo;
+
+    const value = evaluateTimeRange(
+      from,
+      to,
+      validTimeZone,
+      undefined,
+      undefined,
+      undefined,
+    );
+
+    cache.set<CachedTimeRangeState>(cacheKey, { from, to, value }, staleTime);
+
+    return { value, from, to, refreshCounter, onChangeTimeRange, onRefresh };
+  }, [
+    cache,
+    cacheKey,
+    initFrom,
+    initTo,
+    staleTime,
+    refreshCounter,
+    urlState,
+    validTimeZone,
+    onChangeTimeRange,
+    onRefresh,
+  ]);
 }
 
 /** Keeps a raw range that parses, and drops one that does not. */
@@ -175,24 +165,13 @@ function rawToString(bound: DateTime | string): string {
   return typeof bound === 'string' ? bound : bound.toISOString();
 }
 
-function evaluate(
-  from: string,
-  to: string,
-  timeZone: TimeZone,
-): CachedTimeRangeState {
-  return {
-    from,
-    to,
-    value: evaluateTimeRange(
-      from,
-      to,
-      timeZone,
-      undefined,
-      undefined,
-      undefined,
-      //state.fiscalYearStartMonth,
-      //state.UNSAFE_nowDelay,
-      //state.weekStart
-    ),
-  };
+function shouldUseCachedState(
+  cached: CachedTimeRangeState,
+  urlState: TimeRangeUrlState,
+) {
+  if (!urlState.from) {
+    return true;
+  }
+
+  return cached.from === urlState.from && cached.to === urlState.to;
 }
