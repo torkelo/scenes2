@@ -2,22 +2,11 @@ import {
   PanelGridLayout,
   TimeRangeContextPicker,
   TimeRangeRefresh,
-  useDataQuery,
-  VizConfigBuilder,
-  VizPanel,
 } from '@grafana/scenes2';
 import { Stack } from '@grafana/ui';
 
+import { DemoPanel } from '../components/DemoPanel';
 import { PluginPage } from '../components/PluginPage';
-import {
-  FAKE_RANDOM_WALK_DATASOURCE_UID,
-  FAKE_TIMESERIES_PANEL_ID,
-} from '../grafana/constants';
-
-const fakeTimeSeriesViz = new VizConfigBuilder(
-  FAKE_TIMESERIES_PANEL_ID,
-  '0.0.0',
-).build();
 
 const panelTitles = ['Panel A', 'Panel B', 'Panel C', 'Panel D'];
 
@@ -55,22 +44,5 @@ export function PanelGridLayoutDemoPage() {
         </PanelGridLayout>
       </Stack>
     </PluginPage>
-  );
-}
-
-function DemoPanel({ title }: { title: string }) {
-  const data = useDataQuery({
-    queries: [
-      {
-        refId: 'A',
-        datasource: { uid: FAKE_RANDOM_WALK_DATASOURCE_UID },
-        alias: title,
-      },
-    ],
-    maxDataPoints: 30,
-  });
-
-  return (
-    <VizPanel title={title} vizConfig={fakeTimeSeriesViz} data={data.data} />
   );
 }
