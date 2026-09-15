@@ -2,10 +2,16 @@ import './index.css';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { TimeRangeContextProvider } from '@grafana/scenes2';
 
 import { App } from './App';
+import { initFakeGrafanaRuntime } from './grafana/initFakeGrafanaRuntime';
 import { ThemeProvider } from './providers/ThemeProvider';
+
+// Mirrors GrafanaApp.init() running before ReactDOM renders in a real Grafana
+// instance: @grafana/scenes2's VizPanel and useDataQuery read services off
+// @grafana/runtime, so those need registering before anything below queries
+// data or resolves a panel plugin.
+initFakeGrafanaRuntime();
 
 const container = document.getElementById('root');
 
@@ -16,9 +22,7 @@ if (!container) {
 createRoot(container).render(
   <StrictMode>
     <ThemeProvider>
-      <TimeRangeContextProvider>
-        <App />
-      </TimeRangeContextProvider>
+      <App />
     </ThemeProvider>
   </StrictMode>,
 );
