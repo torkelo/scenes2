@@ -3,7 +3,11 @@ import type { ReactNode } from 'react';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
-import { UrlStateProvider, useUrlSync } from './UrlStateContext';
+import {
+  UrlStateProvider,
+  type UrlValues,
+  useUrlSync,
+} from './UrlStateContext';
 import { UrlStateRegistry } from './UrlStateRegistry';
 
 /** The shape a consumer declares, which its keys and writes go by. */
@@ -76,7 +80,7 @@ function renderSynced({
 
 /**
  * Mounts two consumers with no provider above them, which is where they fall
- * back to React state.
+ * back to a query string of their own.
  */
 function renderLocal() {
   const { result } = renderHook(() => [
@@ -101,6 +105,49 @@ function consumer(read: () => Sync) {
         for (const values of updates) {
           read()[1](values);
         }
+      }),
+  };
+}
+
+/**
+ * Mounts a consumer that records the values it was handed on every render, and
+ * hands back the way to move it around.
+ *
+ * Nothing above the consumer reads the location, so React only renders it when
+ * something it subscribed to told it to. That is what makes the recorded
+ * renders worth counting.
+ */
+function renderCounted(entry: string) {
+  const renders: Array<UrlValues<Filters>> = [];
+
+  function Consumer() {
+    const [state] = useUrlSync<Filters>(keys);
+
+    renders.push(state);
+
+    return null;
+  }
+
+  // The consumer sits beside the hook rather than in it, so that reading the
+  // location to navigate with is not itself a reason for the consumer to render.
+  const { result } = renderHook(() => useNavigate(), {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <MemoryRouter initialEntries={[entry]}>
+        <UrlStateProvider>
+          <Consumer />
+          {children}
+        </UrlStateProvider>
+      </MemoryRouter>
+    ),
+  });
+
+  return {
+    /** The values the consumer was handed, one entry per render. */
+    renders,
+    /** Changes the query string from outside, the way a `Link` would. */
+    goTo: (search: string) =>
+      act(() => {
+        result.current({ search });
       }),
   };
 }
@@ -206,6 +253,31 @@ describe('useUrlSync', () => {
 
       expect(synced.state()).toEqual({ query: 'mem' });
       expect(synced.search()).toBe('?query=outer&query2=mem');
+    });
+
+    it('leaves a consumer alone when the location change misses its keys', () => {
+      const counted = renderCounted('/?query=cpu&page=2');
+
+      expect(counted.renders).toHaveLength(1);
+
+      counted.goTo('?query=cpu&page=2&from=now');
+
+      // `from` is nothing to this consumer and its own keys did not move, so it
+      // has no new values to render and no reason to render again. The values it
+      // already holds come back as the same object, so neither does anything
+      // below it that has them in a dependency array.
+      expect(counted.renders).toHaveLength(1);
+      expect(counted.renders[0]).toEqual({ query: 'cpu', page: '2' });
+    });
+
+    it('renders a consumer again when one of its keys moves', () => {
+      const counted = renderCounted('/?query=cpu&page=2');
+
+      counted.goTo('?query=mem&page=2');
+
+      expect(counted.renders).toHaveLength(2);
+      expect(counted.renders[1]).toEqual({ query: 'mem', page: '2' });
+      expect(counted.renders[1]).not.toBe(counted.renders[0]);
     });
 
     it('takes a registry from the provider', () => {

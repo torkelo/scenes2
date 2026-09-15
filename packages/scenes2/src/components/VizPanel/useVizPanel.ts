@@ -31,10 +31,11 @@ export function useVizPanel(props: VizPanelProps) {
     });
   }, [plugin, vizConfig.options, vizConfig.fieldConfig]);
 
-  const rawFrames = rawData?.series ?? [];
+  const rawFrames = rawData?.series;
+  const timeZone = rawData?.request?.timezone;
 
   const appliedFrames = useMemo(() => {
-    if (!plugin || !rawData) {
+    if (!plugin) {
       return rawFrames;
     }
 
@@ -45,9 +46,9 @@ export function useVizPanel(props: VizPanelProps) {
       fieldConfigRegistry,
       replaceVariables: (value: string) => value,
       theme: config.theme2,
-      timeZone: rawData.request?.timezone,
+      timeZone: timeZone,
     });
-  }, [rawFrames, withDefaults.fieldConfig]);
+  }, [rawFrames, withDefaults.fieldConfig, timeZone, plugin]);
 
   const panelDataApplied = useMemo(() => {
     if (!rawData) {
