@@ -8,6 +8,7 @@ import {
   VariableValueSelect,
   TimeRangeContextPicker,
   TimeRangeContextProvider,
+  TimeRangeRefresh,
   UrlStateProvider,
   VariableTestQuery,
 } from '@grafana/scenes2';
@@ -64,7 +65,10 @@ const PrintVariable = React.memo(function PrintVariable() {
       <Stack direction="column" gap={3}>
         <Stack justifyContent={'space-between'}>
           <VariableValueSelect name="service" />
-          <TimeRangeContextPicker />
+          <Stack gap={1}>
+            <TimeRangeContextPicker />
+            <TimeRangeRefresh />
+          </Stack>
         </Stack>
         <VizPanel title="Test graph" vizConfig={plainViz} data={data.data} />
       </Stack>
