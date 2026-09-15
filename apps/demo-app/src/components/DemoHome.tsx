@@ -13,9 +13,11 @@ import {
   VariableTestQuery,
 } from '@grafana/scenes2';
 import { VisibilityMode } from '@grafana/schema';
-import { GraphGradientMode, LineInterpolation, Stack } from '@grafana/ui';
+import { GraphGradientMode, LineInterpolation, LinkButton, Stack } from '@grafana/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
+import { ROUTES } from '../constants';
+import { prefixRoute } from '../utils/utils.routing';
 
 const queryClient = new QueryClient();
 
@@ -25,10 +27,15 @@ export function DemoHome() {
       <QueryClientProvider client={queryClient}>
         <UrlStateProvider>
           <TimeRangeContextProvider cacheKey="DemoHome" staleTime={30000}>
-            <DefineVariable name="service" loading={true}>
-              <VariableTestQuery name="service" query="A.*" delay={2000} />
-              <PrintVariable />
-            </DefineVariable>
+            <Stack direction="column" gap={2}>
+              <LinkButton href={prefixRoute(ROUTES.PanelGridLayoutDemo)} fill="outline">
+                Panel grid layout demo
+              </LinkButton>
+              <DefineVariable name="service" loading={true}>
+                <VariableTestQuery name="service" query="A.*" delay={2000} />
+                <PrintVariable />
+              </DefineVariable>
+            </Stack>
           </TimeRangeContextProvider>
         </UrlStateProvider>
       </QueryClientProvider>

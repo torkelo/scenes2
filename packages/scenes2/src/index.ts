@@ -13,6 +13,10 @@ export { VizPanel } from './components/VizPanel/VizPanel';
 export { useDataQuery } from './hooks/useDataQuery';
 export { useTimeRange } from './hooks/useTimeRange';
 export {
+  PanelGridLayout,
+  type PanelGridLayoutProps,
+} from './layout/PanelGridLayout';
+export {
   TimeRangeContext,
   TimeRangeContextProvider,
 } from './time/TimeRangeContext';
