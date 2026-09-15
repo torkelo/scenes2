@@ -4,7 +4,7 @@ import { DefineVariable } from './DefineVariable';
 import { useInterpolator } from './interpolation/useInterpolator';
 import { VariableTestQuery } from './VariableTestQuery';
 
-describe.only('TestVariable', () => {
+describe('TestVariable', () => {
   it('Simple static variable', () => {
     render(
       <DefineVariable name="test" value={{ value: 'foo', label: 'Foo' }}>
