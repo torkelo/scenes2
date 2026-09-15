@@ -1,22 +1,18 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { PluginPage } from '@grafana/runtime';
 import {
   PanelGridLayout,
-  TimeRangeContextProvider,
-  UrlStateProvider,
+  TimeRangeContextPicker,
+  TimeRangeRefresh,
   useDataQuery,
   VizConfigBuilder,
   VizPanel,
 } from '@grafana/scenes2';
 import { Stack } from '@grafana/ui';
 
+import { PluginPage } from '../components/PluginPage';
 import {
   FAKE_RANDOM_WALK_DATASOURCE_UID,
   FAKE_TIMESERIES_PANEL_ID,
 } from '../grafana/constants';
-
-const queryClient = new QueryClient();
 
 const fakeTimeSeriesViz = new VizConfigBuilder(
   FAKE_TIMESERIES_PANEL_ID,
@@ -25,33 +21,38 @@ const fakeTimeSeriesViz = new VizConfigBuilder(
 
 const panelTitles = ['Panel A', 'Panel B', 'Panel C', 'Panel D'];
 
+const breadcrumbs = [
+  { text: 'Scenarios', url: '/' },
+  { text: 'Panel grid layout demo' },
+];
+
+const actions = (
+  <>
+    <TimeRangeContextPicker />
+    <TimeRangeRefresh />
+  </>
+);
+
 /**
- * Vite-app equivalent of apps/demo-app's PanelGridLayoutDemo: same PluginPage
- * wrapper and QueryClientProvider + UrlStateProvider + TimeRangeContextProvider
- * nesting, querying the fake random-walk data source instead of the testdata
- * plugin. PluginPage renders as a plain div here since nothing has called
- * @grafana/runtime's setPluginPage — that's the package's own fallback, not
- * something this app needs to fake.
+ * Vite-app equivalent of apps/demo-app's PanelGridLayoutDemo, querying the
+ * fake random-walk data source instead of the testdata plugin.
+ * QueryClientProvider, UrlStateProvider and TimeRangeContextProvider live in
+ * App.tsx, above the router.
  */
 export function PanelGridLayoutDemoPage() {
   return (
-    <PluginPage>
+    <PluginPage
+      breadcrumbs={breadcrumbs}
+      title="Panel grid layout demo"
+      description="Renders a grid of panels backed by a fake random-walk data source."
+      actions={actions}
+    >
       <Stack direction="column" gap={2}>
-        <Link to="/">← Back</Link>
-        <QueryClientProvider client={queryClient}>
-          <UrlStateProvider>
-            <TimeRangeContextProvider
-              cacheKey="PanelGridLayoutDemoPage"
-              staleTime={30000}
-            >
-              <PanelGridLayout>
-                {panelTitles.map((title) => (
-                  <DemoPanel key={title} title={title} />
-                ))}
-              </PanelGridLayout>
-            </TimeRangeContextProvider>
-          </UrlStateProvider>
-        </QueryClientProvider>
+        <PanelGridLayout>
+          {panelTitles.map((title) => (
+            <DemoPanel key={title} title={title} />
+          ))}
+        </PanelGridLayout>
       </Stack>
     </PluginPage>
   );
