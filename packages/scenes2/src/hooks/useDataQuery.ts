@@ -5,7 +5,7 @@ import {
   type UseQueryOptions,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import { useId } from 'react';
+import { useContext, useId } from 'react';
 import { lastValueFrom } from 'rxjs';
 import {
   rangeUtil,
@@ -16,6 +16,7 @@ import {
 } from '@grafana/data';
 import { getDataSourceSrv, getRunRequest } from '@grafana/runtime';
 
+import { AdhocFiltersContext } from '../filters/AdhocFiltersContext';
 import { useTimeRange } from './useTimeRange';
 
 // import { hasCustomVariableSupport } from './Components/variables/query/guards';
@@ -39,10 +40,12 @@ export function useDataQuery<T extends DataQuery>(
   const runRequest = getRunRequest();
   const dataSourceSrv = getDataSourceSrv();
   const timeRangeCtx = useTimeRange();
+  const adhocFiltersCtx = useContext(AdhocFiltersContext);
   const queryClient = useQueryClient();
   const interpolate = (value: string) => value; // TODO: use actual variable interpolation
   const timeRange = timeRangeCtx.value;
   const staleTime = options.staleTime ?? 30000;
+  const filters = adhocFiltersCtx?.filters;
 
   const dsRef = findFirstDatasource(options.queries);
   const dsQuery = useQuery({
@@ -50,8 +53,6 @@ export function useDataQuery<T extends DataQuery>(
     queryFn: () => dataSourceSrv.get(dsRef),
     staleTime: Infinity,
   });
-
-  console.log('useDataQuery');
 
   const loadPreviousData = (queryKey: QueryKey) => () => {
     const data = queryClient.getQueriesData<PanelData>({ queryKey });
@@ -67,8 +68,8 @@ export function useDataQuery<T extends DataQuery>(
   const queryOptions: UseQueryOptions<PanelData> = {
     enabled: dsQuery.data != null && options.enabled !== false,
     staleTime: staleTime,
-    queryKey: ['data', queries, timeRangeKey],
-    placeholderData: loadPreviousData(['data', queries, timeRangeKey]),
+    queryKey: ['data', queries, timeRangeKey, filters],
+    placeholderData: loadPreviousData(['data', queries, timeRangeKey, filters]),
     queryFn: () => {
       const request: DataQueryRequest = {
         requestId: requestId + `-${Date.now()}`,
@@ -84,6 +85,7 @@ export function useDataQuery<T extends DataQuery>(
         maxDataPoints: maxDataPoints,
         scopedVars: {},
         liveStreaming: false,
+        filters,
       };
 
       const lowerIntervalLimit = options.minInterval

@@ -1,77 +1,88 @@
-import React from 'react';
-import type { AdHocVariableFilter, MetricFindValue } from '@grafana/data';
+import React, { createContext, useCallback, useMemo, useState } from 'react';
+import type { AdHocVariableFilter } from '@grafana/data';
 import type { DataSourceRef } from '@grafana/schema';
-
-export type FilterOrigin = 'dashboard' | 'scope' | string;
 
 export interface AdHocFilterWithLabels<
   M extends Record<string, unknown> = Record<string, unknown>,
 > extends AdHocVariableFilter {
   keyLabel?: string;
   valueLabels?: string[];
-  // this is used to externally trigger edit mode in combobox filter UI
-  forceEdit?: boolean;
-  // hide the filter from AdHocFiltersVariableRenderer and the URL
-  hidden?: boolean;
   meta?: M;
-  // filter origin, it can be either scopes, dashboards or undefined,
-  // which means it won't appear in the UI
-  origin?: FilterOrigin;
-  // whether this is basically a cancelled filter through filter-key =~ .*
-  matchAllFilter?: boolean;
-  // whether this specific filter is read-only and cannot be edited
-  readOnly?: boolean;
-  // whether this specific filter is restorable to some value from _originalValues
-  restorable?: boolean;
-  // sets this filter as non-applicable
-  nonApplicable?: boolean;
-  // reason with reason for nonApplicable filters
-  nonApplicableReason?: string;
 }
+
+export interface OperatorDefinition {
+  value: string;
+  description: string;
+}
+
+export const OPERATORS: OperatorDefinition[] = [
+  { value: '=', description: 'Equals' },
+  { value: '!=', description: 'Not equal' },
+  { value: '=~', description: 'Matches regex' },
+  { value: '!~', description: 'Does not match regex' },
+];
 
 export interface AdhocFiltersContextState {
   filters: AdHocFilterWithLabels[];
-  /** Base filters to always apply when looking up keys*/
-  baseFilters?: AdHocFilterWithLabels[];
-  /** Filters originated from a source */
-  originFilters?: AdHocFilterWithLabels[];
-  /** Datasource to use for getTagKeys and getTagValues and also controls which scene queries the filters should apply to */
+  /** Data source to query for tag keys/values, and to apply the filters against. */
   datasource?: DataSourceRef | null;
+  onAddFilter(filter: AdHocFilterWithLabels): void;
+  onUpdateFilter(
+    filter: AdHocFilterWithLabels,
+    update: Partial<AdHocFilterWithLabels>,
+  ): void;
+  onRemoveFilter(filter: AdHocFilterWithLabels): void;
 }
 
 export const AdhocFiltersContext =
-  React.createContext<AdhocFiltersContextState | null>(null);
-
-export type OperatorDefinition = {
-  value: string;
-  description?: string;
-  isMulti?: boolean;
-  isRegex?: boolean;
-};
-
-export type LabelNamesProvider = (
-  state: AdhocFiltersContextState,
-  currentKey: string | null,
-  operators?: OperatorDefinition[],
-) => Promise<{ replace?: boolean; values: MetricFindValue[] }>;
-
-export type LabelValuesProvider = (
-  state: AdhocFiltersContextState,
-  filter: AdHocFilterWithLabels,
-) => Promise<{ replace?: boolean; values: MetricFindValue[] }>;
+  createContext<AdhocFiltersContextState | null>(null);
 
 export interface AdhocFiltersProviderProps {
+  datasource?: DataSourceRef | null;
+  initialFilters?: AdHocFilterWithLabels[];
   children: React.ReactNode;
 }
 
-export function AdhocFiltersProvider(props: AdhocFiltersProviderProps) {
-  const contextValue: AdhocFiltersContextState = {
-    filters: [],
-  };
+export function AdhocFiltersProvider({
+  datasource,
+  initialFilters,
+  children,
+}: AdhocFiltersProviderProps) {
+  const [filters, setFilters] = useState<AdHocFilterWithLabels[]>(
+    initialFilters ?? [],
+  );
+
+  const onAddFilter = useCallback((filter: AdHocFilterWithLabels) => {
+    setFilters((prev) => [...prev, filter]);
+  }, []);
+
+  const onUpdateFilter = useCallback(
+    (filter: AdHocFilterWithLabels, update: Partial<AdHocFilterWithLabels>) => {
+      setFilters((prev) =>
+        prev.map((f) => (f === filter ? { ...f, ...update } : f)),
+      );
+    },
+    [],
+  );
+
+  const onRemoveFilter = useCallback((filter: AdHocFilterWithLabels) => {
+    setFilters((prev) => prev.filter((f) => f !== filter));
+  }, []);
+
+  const value = useMemo<AdhocFiltersContextState>(
+    () => ({
+      filters,
+      datasource,
+      onAddFilter,
+      onUpdateFilter,
+      onRemoveFilter,
+    }),
+    [filters, datasource, onAddFilter, onUpdateFilter, onRemoveFilter],
+  );
 
   return (
-    <AdhocFiltersContext.Provider value={contextValue}>
-      {props.children}
+    <AdhocFiltersContext.Provider value={value}>
+      {children}
     </AdhocFiltersContext.Provider>
   );
 }

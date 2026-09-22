@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { TimeRangeContextProvider, UrlStateProvider } from '@grafana/scenes2';
 
+import { AdhocFiltersDemoPage } from './pages/AdhocFiltersDemoPage';
 import { HomePage } from './pages/HomePage';
 import { PanelGridLayoutDemoPage } from './pages/PanelGridLayoutDemoPage';
 import { SinglePanelDemoPage } from './pages/SinglePanelDemoPage';
@@ -23,6 +24,10 @@ export function App() {
               <Route
                 path="/single-panel-demo"
                 element={<SinglePanelDemoPage />}
+              />
+              <Route
+                path="/adhoc-filters-demo"
+                element={<AdhocFiltersDemoPage />}
               />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

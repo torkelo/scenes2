@@ -1,37 +1,108 @@
-import { render } from '@testing-library/react';
-import { useContext } from 'react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { CacheProvider } from '../caching/CacheContext';
-import { TimeRangeContextProvider } from '../time/TimeRangeContext';
-import { UrlStateProvider } from '../url/UrlStateContext';
-import { AdhocFiltersContext, AdhocFiltersProvider } from './AdhocFilters';
+import { useAdhocFilters } from '../hooks/useAdhocFilters';
+import { AdhocFiltersProvider } from './AdhocFiltersContext';
+import type { AdHocFilterWithLabels } from './AdhocFiltersContext';
 
-interface ScenarioProps {}
+function FiltersProbe() {
+  const { filters, onAddFilter, onUpdateFilter, onRemoveFilter } =
+    useAdhocFilters();
 
-function renderScenario(props: Partial<ScenarioProps> = {}) {
-  return render(
-    <CacheProvider>
-      <UrlStateProvider>
-        <TimeRangeContextProvider>
-          <AdhocFiltersProvider>
-            <PrintFilters />
-          </AdhocFiltersProvider>
-        </TimeRangeContextProvider>
-      </UrlStateProvider>
-    </CacheProvider>,
+  return (
+    <div>
+      <span data-testid="filters">
+        {filters.map((f) => `${f.key}${f.operator}${f.value}`).join(',')}
+      </span>
+      <button
+        onClick={() =>
+          onAddFilter({ key: 'service', operator: '=', value: 'checkout' })
+        }
+      >
+        add
+      </button>
+      <button
+        onClick={() => {
+          const target = filters[0];
+          if (target) {
+            onUpdateFilter(target, { value: 'cart' });
+          }
+        }}
+      >
+        update
+      </button>
+      <button
+        onClick={() => {
+          const target = filters[0];
+          if (target) {
+            onRemoveFilter(target);
+          }
+        }}
+      >
+        remove
+      </button>
+    </div>
   );
 }
 
-function PrintFilters() {
-  const context = useContext(AdhocFiltersContext);
-
-  return <div>{JSON.stringify(context?.filters)}</div>;
+function renderScenario(initialFilters?: AdHocFilterWithLabels[]) {
+  return render(
+    <AdhocFiltersProvider initialFilters={initialFilters}>
+      <FiltersProbe />
+    </AdhocFiltersProvider>,
+  );
 }
 
+function readFilters() {
+  return screen.getByTestId('filters').textContent;
+}
+
+afterEach(() => {
+  cleanup();
+});
+
 describe('AdhocFiltersProvider', () => {
-  describe('test', () => {
-    it('Fined adhocfilter context', () => {
-      renderScenario();
-    });
+  it('starts with no filters by default', () => {
+    renderScenario();
+
+    expect(readFilters()).toBe('');
+  });
+
+  it('starts with the given initial filters', () => {
+    renderScenario([{ key: 'env', operator: '=', value: 'prod' }]);
+
+    expect(readFilters()).toBe('env=prod');
+  });
+
+  it('adds a filter', () => {
+    renderScenario();
+
+    fireEvent.click(screen.getByRole('button', { name: 'add' }));
+
+    expect(readFilters()).toBe('service=checkout');
+  });
+
+  it('updates a filter in place', () => {
+    renderScenario([{ key: 'service', operator: '=', value: 'checkout' }]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'update' }));
+
+    expect(readFilters()).toBe('service=cart');
+  });
+
+  it('removes a filter', () => {
+    renderScenario([{ key: 'service', operator: '=', value: 'checkout' }]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'remove' }));
+
+    expect(readFilters()).toBe('');
+  });
+});
+
+describe('useAdhocFilters', () => {
+  it('throws without a provider', () => {
+    expect(() => render(<FiltersProbe />)).toThrow(
+      'AdhocFiltersContext not found',
+    );
   });
 });
