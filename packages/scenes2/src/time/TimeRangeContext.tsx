@@ -7,13 +7,6 @@ import { useCache } from '../caching/CacheContext';
 import { useUrlState } from '../url/UrlStateContext';
 import { evaluateTimeRange, getValidTimeZone, isValid } from './utils';
 
-/** The part of the state that a `cacheKey` remembers across an unmount. */
-interface CachedTimeRangeState {
-  from: string;
-  to: string;
-  value: TimeRange;
-}
-
 export interface TimeRangeContextState {
   from: string;
   to: string;
@@ -22,6 +15,13 @@ export interface TimeRangeContextState {
   refreshCounter: number;
   onChangeTimeRange(timeRange: TimeRange): void;
   onRefresh(): void;
+}
+
+/** The part of the state that a `cacheKey` remembers across an unmount. */
+interface CachedTimeRangeState {
+  from: string;
+  to: string;
+  value: TimeRange;
 }
 
 export const TimeRangeContext = createContext<
