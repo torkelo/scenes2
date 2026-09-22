@@ -6,10 +6,12 @@ import {
 } from '@grafana/runtime';
 
 import {
+  FAKE_LABELED_DATASOURCE_UID,
   FAKE_RANDOM_WALK_DATASOURCE_UID,
   FAKE_TIMESERIES_PANEL_ID,
 } from './constants';
 import { FakeDataSourceSrv } from './fakeDataSourceSrv';
+import { FakeLabeledDataSource } from './FakeLabeledDataSource';
 import { FakeRandomWalkDataSource } from './FakeRandomWalkDataSource';
 import { runFakeRequest } from './fakeRunRequest';
 import { fakeTimeSeriesPanelPlugin } from './FakeTimeSeriesPanel';
@@ -45,11 +47,25 @@ export function initFakeGrafanaRuntime(): void {
     jsonData: {},
   };
 
+  const labeledInstanceSettings: DataSourceInstanceSettings = {
+    uid: FAKE_LABELED_DATASOURCE_UID,
+    name: 'Fake labeled',
+    type: 'fake-labeled',
+    meta: createFakeDataSourcePluginMeta('fake-labeled', 'Fake labeled'),
+    readOnly: true,
+    access: 'direct',
+    jsonData: {},
+  };
+
   setDataSourceSrv(
     new FakeDataSourceSrv([
       {
         instanceSettings,
         dataSource: new FakeRandomWalkDataSource(instanceSettings),
+      },
+      {
+        instanceSettings: labeledInstanceSettings,
+        dataSource: new FakeLabeledDataSource(labeledInstanceSettings),
       },
     ]),
   );

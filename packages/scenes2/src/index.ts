@@ -10,6 +10,19 @@ export { type VizConfig } from './components/VizPanel/PanelBuilders/types';
 export { VizConfigBuilder } from './components/VizPanel/PanelBuilders/VizConfigBuilder';
 export { VizConfigBuilders } from './components/VizPanel/PanelBuilders/VizConfigBuilders';
 export { VizPanel } from './components/VizPanel/VizPanel';
+export {
+  AdHocFilterEditor,
+  type AdHocFilterEditorProps,
+} from './filters/AdHocFilterEditor';
+export { AdHocFiltersCombobox } from './filters/AdHocFiltersCombobox';
+export {
+  type AdHocFilterWithLabels,
+  AdhocFiltersContext,
+  type AdhocFiltersContextState,
+  AdhocFiltersProvider,
+  type AdhocFiltersProviderProps,
+} from './filters/AdhocFiltersContext';
+export { useAdhocFilters } from './hooks/useAdhocFilters';
 export { useDataQuery } from './hooks/useDataQuery';
 export { useTimeRange } from './hooks/useTimeRange';
 export {

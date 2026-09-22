@@ -11,6 +11,7 @@ interface Scenario {
 const scenarios: Scenario[] = [
   { path: '/panel-grid-layout-demo', label: 'Panel grid layout demo' },
   { path: '/single-panel-demo', label: 'Single panel demo' },
+  { path: '/adhoc-filters-demo', label: 'Adhoc filters demo' },
 ];
 
 export function HomePage() {
